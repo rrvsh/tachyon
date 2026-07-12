@@ -12,11 +12,11 @@
       <div>
         <label>
           Prompt
-          <textarea id="prompt" required>hi</textarea>
+          <textarea id="prompt">hi</textarea>
         </label>
       </div>
 
-      <button>Send</button>
+      <button id="sendButton">Send</button>
     </form>
 
     <dialog id="settingsDialog">
@@ -54,6 +54,7 @@
       const output = document.getElementById("output");
       const settingsButton = document.getElementById("settingsButton");
       const newSessionButton = document.getElementById("newSessionButton");
+      const sendButton = document.getElementById("sendButton");
       const sessionList = document.getElementById("sessionList");
       const settingsDialog = document.getElementById("settingsDialog");
       const apiKeyInput = document.getElementById("apiKeyInput");
@@ -64,6 +65,8 @@
 
       let apiKey = localStorage.getItem("openrouterApiKey") || "";
       let model = localStorage.getItem("openrouterModel") || "tencent/hy3:free";
+      let currentSession = null;
+      let activeController = null;
 
       function setSessionIdInUrl(sessionId) {
         const url = new URL(location.href);
@@ -77,59 +80,55 @@
         history.replaceState(null, "", url);
       }
 
-      function readSession() {
+      function loadCurrentSessionFromUrl() {
         const sessionId = new URL(location.href).searchParams.get("session");
 
-        if (!sessionId) {
-          return null;
+        try {
+          currentSession = sessionId ? JSON.parse(localStorage.getItem(`session:${sessionId}`) || "null") : null;
+        } catch {
+          currentSession = null;
         }
 
-        try {
-          return JSON.parse(localStorage.getItem(`session:${sessionId}`) || "null");
-        } catch {
-          return null;
+        if (!currentSession) {
+          setSessionIdInUrl("");
         }
+
+        return currentSession;
       }
 
-      function persistMessages(messages) {
-        const session = readSession();
-
-        if (messages.length === 0) {
-          if (session) {
-            localStorage.removeItem(`session:${session.id}`);
-          }
-          setSessionIdInUrl("");
-          renderMessages();
-          renderSessionList();
+      function saveCurrentSession() {
+        if (!currentSession?.id) {
           return null;
         }
 
+        localStorage.setItem(`session:${currentSession.id}`, JSON.stringify(currentSession));
+        return currentSession;
+      }
+
+      function createOrUpdateCurrentSession(messages) {
         const now = new Date().toISOString();
-        const newSessionId = Array.from(
-          { length: 8 },
-          () => "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"[Math.floor(Math.random() * 62)]
-        ).join("");
-        const nextSession = {
-          id: session?.id || newSessionId,
-          createdAt: session?.createdAt || now,
+
+        currentSession = {
+          id: currentSession?.id || Array.from(
+            { length: 8 },
+            () => "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"[Math.floor(Math.random() * 62)]
+          ).join(""),
+          createdAt: currentSession?.createdAt || now,
           updatedAt: now,
           messages
         };
 
-        setSessionIdInUrl(nextSession.id);
-        localStorage.setItem(`session:${nextSession.id}`, JSON.stringify(nextSession));
-        renderMessages();
-        renderSessionList();
-        return nextSession;
+        setSessionIdInUrl(currentSession.id);
+        return currentSession;
       }
 
-      function renderMessages() {
-        output.textContent = (readSession()?.messages || [])
+      function render() {
+        sendButton.textContent = activeController ? "Abort" : "Send";
+
+        output.textContent = (currentSession?.messages || [])
           .map((message) => `${message.role}: ${message.content}`)
           .join("\n\n");
-      }
 
-      function renderSessionList() {
         sessionList.textContent = "";
 
         Object.keys(localStorage)
@@ -159,8 +158,8 @@
             button.textContent = `${title} ${formattedUpdatedAt}`;
             button.addEventListener("click", () => {
               setSessionIdInUrl(session.id);
-              renderMessages();
-              renderSessionList();
+              loadCurrentSessionFromUrl();
+              render();
             });
 
             item.appendChild(button);
@@ -183,20 +182,26 @@
       });
 
       newSessionButton.addEventListener("click", () => {
+        currentSession = null;
+        // Push a new history entry so Back returns to the previous session.
         const url = new URL(location.href);
         url.searchParams.delete("session");
         history.pushState(null, "", url);
-        renderMessages();
-        renderSessionList();
+        render();
       });
 
       window.addEventListener("popstate", () => {
-        renderMessages();
-        renderSessionList();
+        loadCurrentSessionFromUrl();
+        render();
       });
 
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
+
+        if (activeController) {
+          activeController.abort();
+          return;
+        }
 
         if (!apiKey) {
           errorMessage.textContent = "API key is missing. Add it in Settings.";
@@ -205,9 +210,18 @@
         }
 
         const promptInput = document.getElementById("prompt");
-        const prompt = promptInput.value;
-        const messagesBeforeSend = readSession()?.messages || [];
-        const persistedSession = persistMessages([...messagesBeforeSend, { role: "user", content: prompt }]);
+        const prompt = promptInput.value.trim();
+        const messages = prompt ? [...(currentSession?.messages || []), { role: "user", content: prompt }] : currentSession?.messages || [];
+        let responseSessionId = currentSession?.id || null;
+
+        if (prompt) {
+          const userSession = createOrUpdateCurrentSession(messages);
+          responseSessionId = userSession.id;
+          saveCurrentSession();
+        }
+
+        activeController = new AbortController();
+        render();
         promptInput.value = "";
 
         try {
@@ -221,36 +235,61 @@
             },
             body: JSON.stringify({
               model,
-              messages: persistedSession.messages
-            })
+              messages
+            }),
+            signal: activeController.signal
           });
 
           const data = await response.json();
 
           if (!response.ok) {
-            persistMessages(messagesBeforeSend);
-            promptInput.value = prompt;
             errorMessage.textContent = JSON.stringify(data, null, 2);
             errorDialog.showModal();
             return;
           }
 
           const assistantContent = data.choices?.[0]?.message?.content ?? JSON.stringify(data, null, 2);
-          persistMessages([...(readSession()?.messages || []), { role: "assistant", content: assistantContent }]);
+          let responseSession = null;
+
+          if (responseSessionId) {
+            try {
+              responseSession = JSON.parse(localStorage.getItem(`session:${responseSessionId}`) || "null");
+            } catch {
+              responseSession = null;
+            }
+          }
+
+          responseSession = {
+            id: responseSession?.id || Array.from(
+              { length: 8 },
+              () => "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"[Math.floor(Math.random() * 62)]
+            ).join(""),
+            createdAt: responseSession?.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            messages: [...(responseSession?.messages || []), { role: "assistant", content: assistantContent }]
+          };
+
+          localStorage.setItem(`session:${responseSession.id}`, JSON.stringify(responseSession));
+
+          if (responseSessionId && currentSession?.id === responseSession.id) {
+            currentSession = responseSession;
+          } else if (!responseSessionId && !currentSession) {
+            currentSession = responseSession;
+            setSessionIdInUrl(responseSession.id);
+          }
         } catch (error) {
-          persistMessages(messagesBeforeSend);
-          promptInput.value = prompt;
-          errorMessage.textContent = String(error);
-          errorDialog.showModal();
+          if (error.name !== "AbortError") {
+            errorMessage.textContent = String(error);
+            errorDialog.showModal();
+          }
+        } finally {
+          activeController = null;
+          render();
         }
       });
 
-      if (!readSession()) {
-        setSessionIdInUrl("");
-      }
-
-      renderMessages();
-      renderSessionList();
+      loadCurrentSessionFromUrl();
+      render();
     </script>
   </body>
 </html>
