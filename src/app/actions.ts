@@ -140,13 +140,16 @@ export async function saveAgent(form: {
   name: string;
   model: string;
   systemPrompt: string;
-  params: string;
+  params: string | Record<string, unknown>;
   archived?: boolean;
 }): Promise<void> {
   try {
-    const params = form.params.trim()
-      ? (JSON.parse(form.params) as Record<string, unknown>)
-      : {};
+    const params =
+      typeof form.params === "string"
+        ? form.params.trim()
+          ? (JSON.parse(form.params) as Record<string, unknown>)
+          : {}
+        : form.params;
     const existing = form.id
       ? await getOne<AgentRecord>("agents", form.id)
       : undefined;

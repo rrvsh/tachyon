@@ -18,6 +18,10 @@ async function ensureDefaultAgent(): Promise<void> {
     saveSettings({ ...settings, selectedAgentId: agent.id });
 }
 
+function cssAttr(value: string): string {
+  return value.replace(/["\\]/g, "\\$&");
+}
+
 async function boot(): Promise<void> {
   await ensureDefaultAgent();
   await finalizeStaleUnfinalizedMessages();
@@ -26,6 +30,22 @@ async function boot(): Promise<void> {
   bindEvents(app);
   const rerender = async () => render(app, await loadState());
   window.addEventListener("app:changed", () => void rerender());
+  window.addEventListener("app:stream-updated", (event) => {
+    const detail = (
+      event as CustomEvent<{ messageId: string; content: string }>
+    ).detail;
+    const content = app.querySelector<HTMLElement>(
+      `[data-message-content="${cssAttr(detail.messageId)}"]`,
+    );
+    if (content) content.textContent = detail.content;
+    const recentUserScroll =
+      Date.now() - Number(app.dataset.lastUserScrollAt ?? 0) < 750;
+    if (app.dataset.autoscroll !== "false" && !recentUserScroll) {
+      app
+        .querySelector<HTMLElement>("[data-scroll-anchor]")
+        ?.scrollIntoView({ block: "end", behavior: "instant" });
+    }
+  });
   window.addEventListener("popstate", () => void rerender());
   await rerender();
 }

@@ -29,9 +29,7 @@ test("abort finalizes only the viewed debug request", async ({ page }) => {
     page.getByRole("button", { name: "Abort", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Abort", exact: true }).click();
-  await expect(page.locator(".message.assistant small")).toHaveText(
-    "finalized",
-  );
+  await expect(page.locator(".message.assistant small")).toHaveText("final");
 });
 
 test("branch controls switch between edited message siblings", async ({
@@ -110,8 +108,33 @@ test("import and export flow uses canonical JSON records", async ({ page }) => {
   ).toBeVisible();
 });
 
+test("user scroll intent disables streaming autoscroll", async ({ page }) => {
+  const longText = Array.from({ length: 160 }, (_, i) => `token${i}`).join(
+    "%20",
+  );
+  await page.setViewportSize({ width: 900, height: 520 });
+  await page.goto(`/?debug=1&debugDelay=12&debugText=${longText}`);
+  await page
+    .getByPlaceholder("Message (empty for assistant-only)")
+    .fill("long stream");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.locator(".message.assistant")).toBeVisible();
+
+  await page.locator(".conversation").hover();
+  await page.mouse.wheel(0, -800);
+  await expect
+    .poll(() => page.locator("#app").evaluate((el) => el.dataset.autoscroll))
+    .toBe("false");
+
+  await page.waitForTimeout(500);
+  await expect(
+    page.locator("#app").evaluate((el) => el.dataset.autoscroll),
+  ).resolves.toBe("false");
+});
+
 test("agent form, edit, and settings are functional", async ({ page }) => {
   await page.goto("/?debug=1");
+  await page.getByRole("button", { name: "Agents", exact: true }).click();
   await page
     .locator('form[data-agent-form] input[name="name"]')
     .fill("Agent E2E");
@@ -122,12 +145,23 @@ test("agent form, edit, and settings are functional", async ({ page }) => {
     .locator("form[data-agent-form]")
     .getByRole("button", { name: "Save agent" })
     .click();
+
   await expect(page.locator("li", { hasText: "Agent E2E" })).toBeVisible();
 
-  const replies = ["Agent Edited", "model/edited", "Edited system", "{}"];
-  page.on("dialog", async (dialog) => {
-    await dialog.accept(replies.shift() ?? dialog.defaultValue());
-  });
-  await page.locator("li", { hasText: "Agent E2E" }).getByText("edit").click();
+  await page
+    .locator("li", { hasText: "Agent E2E" })
+    .getByRole("button", { name: "Edit agent" })
+    .click();
+  await page
+    .locator('form[data-agent-form] input[name="name"]')
+    .fill("Agent Edited");
+  await page
+    .locator('form[data-agent-form] input[name="model"]')
+    .fill("model/edited");
+  await page
+    .locator("form[data-agent-form]")
+    .getByRole("button", { name: "Save agent" })
+    .click();
+
   await expect(page.locator("li", { hasText: "Agent Edited" })).toBeVisible();
 });

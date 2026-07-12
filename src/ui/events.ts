@@ -5,7 +5,6 @@ import {
   editMessage,
   exportJson,
   forkMessage,
-  getAgent,
   importJsonText,
   newSession,
   openSession,
@@ -20,8 +19,37 @@ import { loadState } from "../app/state";
 import { siblings } from "../messages/tree";
 
 export function bindEvents(app: HTMLElement): void {
+  app.addEventListener(
+    "wheel",
+    (event) => {
+      if (event.deltaY < 0) {
+        app.dataset.autoscroll = "false";
+        app.dataset.lastUserScrollAt = String(Date.now());
+      }
+    },
+    { capture: true, passive: true },
+  );
+  app.addEventListener(
+    "touchmove",
+    () => {
+      app.dataset.autoscroll = "false";
+      app.dataset.lastUserScrollAt = String(Date.now());
+    },
+    { capture: true, passive: true },
+  );
   app.addEventListener("click", async (event) => {
     const target = event.target as HTMLElement;
+    if (target.matches("dialog.modal")) {
+      (target as HTMLDialogElement).close();
+      return;
+    }
+    if (target.matches("[data-close-dialog]")) {
+      target.closest("dialog")?.close();
+      return;
+    }
+    const dialogId = target.getAttribute("data-open-dialog");
+    if (dialogId) return openDialog(dialogId);
+    if (target.matches("[data-add-param]")) return addExtraParamRow(app);
     const open = target.getAttribute("data-open-session");
     if (open) return openSession(open);
     if (target.matches('[data-action="new-session"]')) return newSession();
@@ -34,29 +62,12 @@ export function bindEvents(app: HTMLElement): void {
     if (agentArchive)
       return void archiveAgent(
         agentArchive,
-        target.textContent !== "restore",
+        target.getAttribute("aria-label") !== "Restore agent",
       ).then(refresh);
     const agentEdit = target.getAttribute("data-agent-edit");
     if (agentEdit) {
-      const agent = await getAgent(agentEdit);
-      if (!agent) return;
-      const name = prompt("Agent name?", agent.name);
-      if (name === null) return;
-      const model = prompt("Agent model?", agent.model);
-      if (model === null) return;
-      const systemPrompt = prompt("System prompt?", agent.systemPrompt);
-      if (systemPrompt === null) return;
-      const params = prompt("Params JSON?", JSON.stringify(agent.params));
-      if (params === null) return;
-      await saveAgent({
-        id: agent.id,
-        name,
-        model,
-        systemPrompt,
-        params,
-        archived: agent.archived,
-      });
-      return refresh();
+      populateAgentForm(target);
+      return openDialog("agents-dialog");
     }
     const edit = target.getAttribute("data-edit");
     if (edit) {
@@ -105,10 +116,11 @@ export function bindEvents(app: HTMLElement): void {
     if (form.matches("[data-agent-form]")) {
       const fd = new FormData(form);
       await saveAgent({
+        id: String(fd.get("id") || "") || undefined,
         name: String(fd.get("name") ?? ""),
         model: String(fd.get("model") ?? ""),
         systemPrompt: String(fd.get("systemPrompt") ?? ""),
-        params: String(fd.get("params") ?? ""),
+        params: collectParams(form),
       });
       refresh();
     }
@@ -123,16 +135,140 @@ export function bindEvents(app: HTMLElement): void {
   app.addEventListener("click", (event) => {
     const target = event.target as HTMLElement;
     if (target.matches("[data-save-settings]")) {
+      const root = target.closest("dialog") ?? app;
       const api = (
-        app.querySelector("[data-setting-api-key]") as HTMLInputElement
+        root.querySelector("[data-setting-api-key]") as HTMLInputElement
       ).value;
       const agent =
-        (app.querySelector("[data-setting-agent]") as HTMLSelectElement)
+        (root.querySelector("[data-setting-agent]") as HTMLSelectElement)
           .value || null;
       updateSettings(api, agent);
       refresh();
     }
   });
+}
+
+function openDialog(id: string): void {
+  const dialog = document.getElementById(id) as HTMLDialogElement | null;
+  if (dialog && !dialog.open) dialog.showModal();
+}
+
+function addExtraParamRow(
+  root: ParentNode,
+  key = "",
+  value = "",
+): HTMLDivElement | null {
+  const list = root.querySelector("[data-extra-param-list]");
+  if (!list) return null;
+  const row = document.createElement("div");
+  row.className = "extra-param-row";
+  row.innerHTML = `<input name="extraParamKey" placeholder="key"><input name="extraParamValue" placeholder="value or JSON"><button class="icon-button" type="button" aria-label="Remove field" title="Remove field">×</button>`;
+  const [keyInput, valueInput] = row.querySelectorAll("input");
+  keyInput.value = key;
+  valueInput.value = value;
+  row.querySelector("button")?.addEventListener("click", () => row.remove());
+  list.append(row);
+  return row;
+}
+
+function populateAgentForm(target: HTMLElement): void {
+  const row = target.closest<HTMLElement>("[data-agent-id]");
+  const form = document.querySelector(
+    "[data-agent-form]",
+  ) as HTMLFormElement | null;
+  if (!row || !form) return;
+  const params = JSON.parse(row.dataset.agentParams || "{}") as Record<
+    string,
+    unknown
+  >;
+  form.reset();
+  (form.elements.namedItem("id") as HTMLInputElement).value =
+    row.dataset.agentId ?? "";
+  (form.elements.namedItem("name") as HTMLInputElement).value =
+    row.dataset.agentName ?? "";
+  (form.elements.namedItem("model") as HTMLInputElement).value =
+    row.dataset.agentModel ?? "";
+  (form.elements.namedItem("systemPrompt") as HTMLTextAreaElement).value =
+    row.dataset.agentSystemPrompt ?? "";
+  const commonKeys = new Set<string>();
+  form
+    .querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-param-path]")
+    .forEach((input) => {
+      const key = input.dataset.paramPath!;
+      commonKeys.add(key.split(".")[0]);
+      input.value = stringifyParam(readPath(params, key));
+    });
+  const list = form.querySelector("[data-extra-param-list]");
+  if (list) list.textContent = "";
+  for (const [key, value] of Object.entries(params)) {
+    if (!commonKeys.has(key))
+      addExtraParamRow(form, key, stringifyParam(value));
+  }
+}
+
+function collectParams(form: HTMLFormElement): Record<string, unknown> {
+  const params: Record<string, unknown> = {};
+  form
+    .querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-param-path]")
+    .forEach((input) => {
+      if (!input.value.trim()) return;
+      writePath(
+        params,
+        input.dataset.paramPath!,
+        parseParam(input.value, input.type),
+      );
+    });
+  const keys = Array.from(
+    form.querySelectorAll<HTMLInputElement>('input[name="extraParamKey"]'),
+  );
+  const values = Array.from(
+    form.querySelectorAll<HTMLInputElement>('input[name="extraParamValue"]'),
+  );
+  keys.forEach((keyInput, index) => {
+    const key = keyInput.value.trim();
+    const value = values[index]?.value.trim();
+    if (key && value) params[key] = parseParam(value, "text");
+  });
+  return params;
+}
+
+function readPath(source: Record<string, unknown>, path: string): unknown {
+  return path.split(".").reduce<unknown>((current, part) => {
+    if (typeof current !== "object" || current === null) return undefined;
+    return (current as Record<string, unknown>)[part];
+  }, source);
+}
+
+function writePath(
+  target: Record<string, unknown>,
+  path: string,
+  value: unknown,
+): void {
+  const parts = path.split(".");
+  let current = target;
+  for (const part of parts.slice(0, -1)) {
+    const next = current[part];
+    if (typeof next !== "object" || next === null || Array.isArray(next)) {
+      current[part] = {};
+    }
+    current = current[part] as Record<string, unknown>;
+  }
+  current[parts.at(-1)!] = value;
+}
+
+function parseParam(value: string, type: string): unknown {
+  const trimmed = value.trim();
+  if (type === "number") return Number(trimmed);
+  if (["true", "false"].includes(trimmed)) return trimmed === "true";
+  if (trimmed === "null") return null;
+  if (trimmed.startsWith("{") || trimmed.startsWith("["))
+    return JSON.parse(trimmed) as unknown;
+  return trimmed;
+}
+
+function stringifyParam(value: unknown): string {
+  if (value === undefined) return "";
+  return typeof value === "string" ? value : JSON.stringify(value);
 }
 
 function refresh(): void {

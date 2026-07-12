@@ -157,12 +157,17 @@ export async function startRequest(input: {
         async (delta) => {
           const current = await getOne<MessageRecord>("messages", assistant.id);
           if (!current || current.finalized) return;
-          await putOne("messages", {
+          const updated = {
             ...current,
             content: current.content + delta,
             updatedAt: Date.now(),
-          });
-          window.dispatchEvent(new CustomEvent("app:changed"));
+          };
+          await putOne("messages", updated);
+          window.dispatchEvent(
+            new CustomEvent("app:stream-updated", {
+              detail: { messageId: assistant.id, content: updated.content },
+            }),
+          );
         },
       )
       .then(async () => finalizeRequest(sessionId, assistant.id))

@@ -20,12 +20,23 @@ const errors: string[] = [];
 const info: string[] = [];
 
 export function notify(message: string, kind: "error" | "info" = "info"): void {
-  (kind === "error" ? errors : info).push(message);
+  const bucket = kind === "error" ? errors : info;
+  bucket.push(message);
+  const index = bucket.length - 1;
   window.dispatchEvent(new CustomEvent("app:changed"));
+  window.setTimeout(() => {
+    if (bucket[index] === message) bucket.splice(index, 1);
+    else {
+      const current = bucket.indexOf(message);
+      if (current >= 0) bucket.splice(current, 1);
+    }
+    window.dispatchEvent(new CustomEvent("app:changed"));
+  }, 6000);
 }
 
 export function clearNotice(index: number, kind: "error" | "info"): void {
   (kind === "error" ? errors : info).splice(index, 1);
+  window.dispatchEvent(new CustomEvent("app:changed"));
 }
 
 export function sessionIdFromUrl(): string | null {
