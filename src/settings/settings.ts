@@ -1,7 +1,7 @@
 import type { SettingsRecord } from "../data/schema";
 
-const KEY = "openrouter-static-settings";
-const POINTER_PREFIX = "openrouter-current-message:";
+const KEY = "tachyon-settings";
+const POINTER_PREFIX = "tachyon-current-message:";
 
 export function getSettings(): SettingsRecord {
   try {

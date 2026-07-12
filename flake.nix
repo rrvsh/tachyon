@@ -1,5 +1,5 @@
 {
-  description = "OpenRouter static chat dev shell";
+  description = "Tachyon dev shell";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 

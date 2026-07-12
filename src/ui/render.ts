@@ -409,7 +409,7 @@ export function render(app: HTMLElement, state: AppState): void {
     <div class="app-shell">
       <aside class="sidebar" aria-label="Sessions">
         <div class="sidebar-top">
-          <div class="prompt-mark" aria-label="App">▰</div>
+          <div class="app-mark" aria-label="Tachyon">Tachyon</div>
           <button class="icon-button primary-button" data-action="new-session" aria-label="New chat" title="New chat">＋</button>
         </div>
         <nav class="session-nav">
@@ -421,7 +421,7 @@ export function render(app: HTMLElement, state: AppState): void {
 
       <main class="chat-panel">
         <header class="chat-header">
-          <div class="terminal-title"><span>$</span> ${state.session ? esc(state.session.title) : "new session"}${new URLSearchParams(location.search).has("debug") ? '<span class="debug-pill">debug</span>' : ""}</div>
+          <div class="chat-title">${state.session ? esc(state.session.title) : "new session"}${new URLSearchParams(location.search).has("debug") ? '<span class="debug-pill">debug</span>' : ""}</div>
           <div class="header-actions">
             <button class="icon-button" data-open-dialog="settings-dialog" aria-label="Settings" title="Settings">⚙</button>
             <button class="icon-button" data-open-dialog="agents-dialog" aria-label="Agents" title="Agents">◇</button>
@@ -517,7 +517,7 @@ function isNearBottom(element: HTMLElement): boolean {
 }
 
 function renderBlankState(): string {
-  return `<div class="blank-state" data-testid="blank"><p class="eyebrow">local / static / private</p><h2>ready.</h2><p>select an agent, add an API key if needed, then send a message.</p></div>`;
+  return `<div class="blank-state" data-testid="blank"><p class="eyebrow">local / static / private</p><h2>Tachyon</h2><p>select an agent, add an API key if needed, then send a message.</p></div>`;
 }
 
 function renderMessages(state: AppState): string {

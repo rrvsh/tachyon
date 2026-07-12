@@ -196,7 +196,7 @@ export async function exportJson(): Promise<void> {
   a.href = URL.createObjectURL(
     new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
   );
-  a.download = `openrouter-static-export-${data.exportedAt}.json`;
+  a.download = `tachyon-export-${data.exportedAt}.json`;
   a.click();
   URL.revokeObjectURL(a.href);
 }

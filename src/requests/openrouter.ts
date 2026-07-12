@@ -10,7 +10,7 @@ export const openRouterTransport: Transport = {
           "Content-Type": "application/json",
           Authorization: `Bearer ${apiKey ?? ""}`,
           "HTTP-Referer": location.origin,
-          "X-Title": "OpenRouter Static Chat",
+          "X-Title": "Tachyon",
         },
         body: JSON.stringify(payload),
         signal,

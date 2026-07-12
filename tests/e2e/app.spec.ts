@@ -66,7 +66,7 @@ test("import and export flow uses canonical JSON records", async ({ page }) => {
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export", exact: true }).click();
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toContain("openrouter-static-export");
+  expect(download.suggestedFilename()).toContain("tachyon-export");
 
   const sessionId = uniqueId("imps");
   const messageId = `m_${uniqueId("msg")}`;

@@ -52,7 +52,7 @@ export interface ExportFile {
   agents: AgentRecord[];
 }
 
-export const DB_NAME = "openrouter-static-chat";
+export const DB_NAME = "tachyon-chat";
 export const DB_VERSION = 1;
 
 export function now(): number {
