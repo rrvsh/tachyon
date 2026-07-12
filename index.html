@@ -8,13 +8,6 @@
 
       <div>
         <label>
-          Model slug
-          <input id="model" value="tencent/hy3:free" required>
-        </label>
-      </div>
-
-      <div>
-        <label>
           Prompt
           <textarea id="prompt" required>hi</textarea>
         </label>
@@ -29,6 +22,13 @@
           <label>
             API key
             <input id="apiKeyInput" type="password">
+          </label>
+        </div>
+
+        <div>
+          <label>
+            Model slug
+            <input id="modelInput" value="tencent/hy3:free" required>
           </label>
         </div>
 
@@ -52,20 +52,25 @@
       const settingsButton = document.getElementById("settingsButton");
       const settingsDialog = document.getElementById("settingsDialog");
       const apiKeyInput = document.getElementById("apiKeyInput");
+      const modelInput = document.getElementById("modelInput");
       const saveSettingsButton = document.getElementById("saveSettingsButton");
       const errorDialog = document.getElementById("errorDialog");
       const errorMessage = document.getElementById("errorMessage");
 
       let apiKey = localStorage.getItem("openrouterApiKey") || "";
+      let model = localStorage.getItem("openrouterModel") || "tencent/hy3:free";
 
       settingsButton.addEventListener("click", () => {
         apiKeyInput.value = apiKey;
+        modelInput.value = model;
         settingsDialog.showModal();
       });
 
       saveSettingsButton.addEventListener("click", () => {
         apiKey = apiKeyInput.value;
+        model = modelInput.value;
         localStorage.setItem("openrouterApiKey", apiKey);
+        localStorage.setItem("openrouterModel", model);
         settingsDialog.close();
       });
 
@@ -80,7 +85,6 @@
 
         output.textContent = "Loading...";
 
-        const model = document.getElementById("model").value;
         const prompt = document.getElementById("prompt").value;
 
         try {
