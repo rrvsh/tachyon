@@ -423,10 +423,10 @@ export function render(app: HTMLElement, state: AppState): void {
         <header class="chat-header">
           <div class="chat-title">${state.session ? esc(state.session.title) : "new session"}${new URLSearchParams(location.search).has("debug") ? '<span class="debug-pill">debug</span>' : ""}</div>
           <div class="header-actions">
-            <button class="icon-button" data-open-dialog="settings-dialog" aria-label="Settings" title="Settings">[cfg]</button>
-            <button class="icon-button" data-open-dialog="agents-dialog" aria-label="Agents" title="Agents">[agt]</button>
-            <button class="icon-button" data-action="export" aria-label="Export" title="Export">[out]</button>
-            <label class="icon-button import-button" aria-label="Import" title="Import">[in]<input data-action="import" type="file" accept="application/json"></label>
+            <button class="icon-button" data-open-dialog="settings-dialog" aria-label="Settings" title="Settings">settings</button>
+            <button class="icon-button" data-open-dialog="agents-dialog" aria-label="Agents" title="Agents">agents</button>
+            <button class="icon-button" data-action="export" aria-label="Export" title="Export">export</button>
+            <label class="icon-button import-button" aria-label="Import" title="Import">import<input data-action="import" type="file" accept="application/json"></label>
           </div>
         </header>
         <div class="notices">${state.errors.map((e) => `<p class="error">${esc(e)}</p>`).join("")}${state.info.map((e) => `<p class="info">${esc(e)}</p>`).join("")}</div>
@@ -539,7 +539,7 @@ function renderComposer(state: AppState): string {
   const agent = state.agents.find(
     (a) => a.id === currentSettings().selectedAgentId,
   );
-  return `<form class="composer" data-compose><div class="composer-context">${agent ? `agent: ${esc(agent.name)}` : "agent: none"}</div><div class="composer-box"><textarea name="message" placeholder="Message (empty for assistant-only)"></textarea><button class="icon-button send-button" type="submit" aria-label="${abort ? "Abort" : "Send"}" title="${abort ? "Abort" : "Send"}">${abort ? "stop" : "send"}</button></div></form>`;
+  return `<form class="composer" data-compose><div class="composer-context">${agent ? `agent: ${esc(agent.name)}` : "agent: none"}</div><div class="composer-box"><textarea name="message" placeholder="Message (empty for assistant-only)"></textarea><button class="icon-button send-button" type="submit" aria-label="${abort ? "Abort" : "Send"}" title="${abort ? "Abort" : "Send"}">${abort ? "halt" : "send"}</button></div></form>`;
 }
 
 function renderSettingsDialog(
