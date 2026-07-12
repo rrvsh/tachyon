@@ -7,6 +7,8 @@
         <button id="newSessionButton" type="button">New Session</button>
       </div>
 
+      <ul id="sessionList"></ul>
+
       <div>
         <label>
           Prompt
@@ -52,6 +54,7 @@
       const output = document.getElementById("output");
       const settingsButton = document.getElementById("settingsButton");
       const newSessionButton = document.getElementById("newSessionButton");
+      const sessionList = document.getElementById("sessionList");
       const settingsDialog = document.getElementById("settingsDialog");
       const apiKeyInput = document.getElementById("apiKeyInput");
       const modelInput = document.getElementById("modelInput");
@@ -97,6 +100,7 @@
           }
           setSessionIdInUrl("");
           renderMessages();
+          renderSessionList();
           return null;
         }
 
@@ -115,6 +119,7 @@
         setSessionIdInUrl(nextSession.id);
         localStorage.setItem(`session:${nextSession.id}`, JSON.stringify(nextSession));
         renderMessages();
+        renderSessionList();
         return nextSession;
       }
 
@@ -122,6 +127,45 @@
         output.textContent = (readSession()?.messages || [])
           .map((message) => `${message.role}: ${message.content}`)
           .join("\n\n");
+      }
+
+      function renderSessionList() {
+        sessionList.textContent = "";
+
+        Object.keys(localStorage)
+          .filter((key) => key.startsWith("session:"))
+          .map((key) => {
+            try {
+              return JSON.parse(localStorage.getItem(key));
+            } catch {
+              return null;
+            }
+          })
+          .filter((session) => session?.id && session.updatedAt)
+          .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+          .forEach((session) => {
+            const firstUserMessage = session.messages?.find((message) => message.role === "user")?.content || "Untitled session";
+            const title = firstUserMessage.length > 40 ? `${firstUserMessage.slice(0, 40)}…` : firstUserMessage;
+            const updatedAt = new Date(session.updatedAt);
+            const formattedUpdatedAt = [
+              String(updatedAt.getDate()).padStart(2, "0"),
+              String(updatedAt.getMonth() + 1).padStart(2, "0"),
+              updatedAt.getFullYear()
+            ].join("/") + ` ${String(updatedAt.getHours()).padStart(2, "0")}:${String(updatedAt.getMinutes()).padStart(2, "0")}`;
+            const item = document.createElement("li");
+            const button = document.createElement("button");
+
+            button.type = "button";
+            button.textContent = `${title} ${formattedUpdatedAt}`;
+            button.addEventListener("click", () => {
+              setSessionIdInUrl(session.id);
+              renderMessages();
+              renderSessionList();
+            });
+
+            item.appendChild(button);
+            sessionList.appendChild(item);
+          });
       }
 
       settingsButton.addEventListener("click", () => {
@@ -143,10 +187,12 @@
         url.searchParams.delete("session");
         history.pushState(null, "", url);
         renderMessages();
+        renderSessionList();
       });
 
       window.addEventListener("popstate", () => {
         renderMessages();
+        renderSessionList();
       });
 
       form.addEventListener("submit", async (event) => {
@@ -204,6 +250,7 @@
       }
 
       renderMessages();
+      renderSessionList();
     </script>
   </body>
 </html>
