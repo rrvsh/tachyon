@@ -410,7 +410,7 @@ export function render(app: HTMLElement, state: AppState): void {
       <aside class="sidebar" aria-label="Sessions">
         <div class="sidebar-top">
           <div class="app-mark" aria-label="Tachyon">Tachyon</div>
-          <button class="icon-button primary-button" data-action="new-session" aria-label="New chat" title="New chat">＋</button>
+          <button class="icon-button primary-button" data-action="new-session" aria-label="New chat" title="New chat">+</button>
         </div>
         <nav class="session-nav">
           <h2>sessions</h2>
@@ -423,10 +423,10 @@ export function render(app: HTMLElement, state: AppState): void {
         <header class="chat-header">
           <div class="chat-title">${state.session ? esc(state.session.title) : "new session"}${new URLSearchParams(location.search).has("debug") ? '<span class="debug-pill">debug</span>' : ""}</div>
           <div class="header-actions">
-            <button class="icon-button" data-open-dialog="settings-dialog" aria-label="Settings" title="Settings">⚙</button>
-            <button class="icon-button" data-open-dialog="agents-dialog" aria-label="Agents" title="Agents">◇</button>
-            <button class="icon-button" data-action="export" aria-label="Export" title="Export">⇩</button>
-            <label class="icon-button import-button" aria-label="Import" title="Import">⇧<input data-action="import" type="file" accept="application/json"></label>
+            <button class="icon-button" data-open-dialog="settings-dialog" aria-label="Settings" title="Settings">[cfg]</button>
+            <button class="icon-button" data-open-dialog="agents-dialog" aria-label="Agents" title="Agents">[agt]</button>
+            <button class="icon-button" data-action="export" aria-label="Export" title="Export">[out]</button>
+            <label class="icon-button import-button" aria-label="Import" title="Import">[in]<input data-action="import" type="file" accept="application/json"></label>
           </div>
         </header>
         <div class="notices">${state.errors.map((e) => `<p class="error">${esc(e)}</p>`).join("")}${state.info.map((e) => `<p class="info">${esc(e)}</p>`).join("")}</div>
@@ -517,7 +517,7 @@ function isNearBottom(element: HTMLElement): boolean {
 }
 
 function renderBlankState(): string {
-  return `<div class="blank-state" data-testid="blank"><p class="eyebrow">local / static / private</p><h2>Tachyon</h2><p>select an agent, add an API key if needed, then send a message.</p></div>`;
+  return `<div class="blank-state" data-testid="blank"><h2>Tachyon</h2></div>`;
 }
 
 function renderMessages(state: AppState): string {
@@ -527,9 +527,9 @@ function renderMessages(state: AppState): string {
       const idx = sibs.findIndex((s) => s.id === m.id);
       const branchControls =
         sibs.length > 1
-          ? `<div class="branch-controls"><button class="icon-button borderless-icon" data-branch-prev="${m.id}" aria-label="Previous branch" title="Previous branch">‹</button><span>${idx + 1}/${sibs.length}</span><button class="icon-button borderless-icon" data-branch-next="${m.id}" aria-label="Next branch" title="Next branch">›</button></div>`
+          ? `<div class="branch-controls"><button class="icon-button borderless-icon" data-branch-prev="${m.id}" aria-label="Previous branch" title="Previous branch">&lt;</button><span>${idx + 1}/${sibs.length}</span><button class="icon-button borderless-icon" data-branch-next="${m.id}" aria-label="Next branch" title="Next branch">&gt;</button></div>`
           : "";
-      return `<li data-message-id="${m.id}" class="message ${m.role}"><div class="message-card"><div class="message-meta"><strong>${m.role === "assistant" ? "assistant" : "user"}</strong></div><pre data-message-content="${m.id}">${esc(m.content)}</pre><div class="message-controls">${branchControls}<div class="message-actions"><button class="icon-button borderless-icon" data-edit="${m.id}" aria-label="Edit" title="Edit">✎</button><button class="icon-button borderless-icon" data-fork="${m.id}" aria-label="Fork" title="Fork">⑂</button><button class="icon-button borderless-icon" data-edit-fork="${m.id}" aria-label="Edit and fork" title="Edit and fork">⎇</button>${m.role === "assistant" ? `<button class="icon-button borderless-icon" data-regenerate="${m.id}" aria-label="Regenerate" title="Regenerate">↻</button>` : ""}</div></div></div></li>`;
+      return `<li data-message-id="${m.id}" class="message ${m.role}"><div class="message-card"><div class="message-meta"><strong>${m.role === "assistant" ? "assistant" : "user"}</strong></div><pre data-message-content="${m.id}">${esc(m.content)}</pre><div class="message-controls">${branchControls}<div class="message-actions"><button class="icon-button borderless-icon" data-edit="${m.id}" aria-label="Edit" title="Edit">edit</button><button class="icon-button borderless-icon" data-fork="${m.id}" aria-label="Fork" title="Fork">fork</button><button class="icon-button borderless-icon" data-edit-fork="${m.id}" aria-label="Edit and fork" title="Edit and fork">split</button>${m.role === "assistant" ? `<button class="icon-button borderless-icon" data-regenerate="${m.id}" aria-label="Regenerate" title="Regenerate">redo</button>` : ""}</div></div></div></li>`;
     })
     .join("")}</ol>`;
 }
@@ -539,7 +539,7 @@ function renderComposer(state: AppState): string {
   const agent = state.agents.find(
     (a) => a.id === currentSettings().selectedAgentId,
   );
-  return `<form class="composer" data-compose><div class="composer-context">${agent ? `agent: ${esc(agent.name)}` : "agent: none"}</div><div class="composer-box"><textarea name="message" placeholder="Message (empty for assistant-only)"></textarea><button class="icon-button send-button" type="submit" aria-label="${abort ? "Abort" : "Send"}" title="${abort ? "Abort" : "Send"}">${abort ? "■" : "➤"}</button></div></form>`;
+  return `<form class="composer" data-compose><div class="composer-context">${agent ? `agent: ${esc(agent.name)}` : "agent: none"}</div><div class="composer-box"><textarea name="message" placeholder="Message (empty for assistant-only)"></textarea><button class="icon-button send-button" type="submit" aria-label="${abort ? "Abort" : "Send"}" title="${abort ? "Abort" : "Send"}">${abort ? "stop" : "send"}</button></div></form>`;
 }
 
 function renderSettingsDialog(

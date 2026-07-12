@@ -57,6 +57,9 @@ button:focus-visible,
   min-width: 2rem;
   min-height: 2rem;
   padding: 0.2rem 0.45rem;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
 }
 
 .primary-button,
@@ -246,10 +249,11 @@ h2 {
 
 .blank-state {
   display: grid;
-  align-content: center;
+  place-items: center;
   min-height: 55vh;
   max-width: 760px;
   margin: 0 auto;
+  text-align: center;
 }
 
 .blank-state h2 {
