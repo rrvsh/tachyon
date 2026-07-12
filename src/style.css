@@ -1,15 +1,15 @@
 :root {
   color-scheme: dark;
-  --bg: #05060a;
-  --panel: #0b0d13;
-  --panel-strong: #10131c;
-  --text: #f4f7fb;
-  --muted: #8b93a7;
-  --border: #242936;
-  --accent: #8ab4ff;
-  --accent-strong: #c9dcff;
-  --danger: #ff7b72;
-  --shadow: 0 18px 55px rgba(0, 0, 0, 0.35);
+  --bg: #050505;
+  --panel: #050505;
+  --panel-strong: #0d0d0d;
+  --text: #eeeeee;
+  --muted: #8a8a8a;
+  --border: #4a4a4a;
+  --accent: #ffffff;
+  --accent-strong: #ffffff;
+  --danger: #ff6b6b;
+  --shadow: none;
 }
 
 * {
@@ -21,13 +21,8 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family:
-    Inter,
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
+    "SFMono-Regular", Consolas, "Liberation Mono", Menlo, ui-monospace,
+    monospace;
   font-size: 14px;
 }
 
@@ -41,7 +36,7 @@ textarea {
 button,
 .import-button {
   border: 1px solid var(--border);
-  border-radius: 0.25rem;
+  border-radius: 0;
   background: var(--panel);
   color: var(--text);
   cursor: pointer;
@@ -67,8 +62,8 @@ button:focus-visible,
 .primary-button,
 .send-button {
   border-color: var(--accent);
-  background: var(--accent);
-  color: #030409;
+  background: var(--text);
+  color: var(--bg);
 }
 
 .ghost-button {
@@ -83,7 +78,7 @@ button:focus-visible,
 
 .sidebar {
   border-right: 1px solid var(--border);
-  background: var(--panel-strong);
+  background: var(--panel);
   padding: 0.75rem;
   overflow: auto;
 }
@@ -108,7 +103,18 @@ button:focus-visible,
 
 .app-mark {
   font-weight: 700;
-  letter-spacing: -0.03em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app-mark::before {
+  content: "[";
+  color: var(--muted);
+}
+
+.app-mark::after {
+  content: "]";
+  color: var(--muted);
 }
 
 h1,
@@ -128,7 +134,8 @@ h2 {
 .session-nav h2,
 .archive-panel summary {
   margin: 1rem 0 0.45rem;
-  text-transform: lowercase;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .session-nav ul,
@@ -156,7 +163,12 @@ h2 {
 
 .session-link.active {
   border-color: var(--accent);
-  background: var(--panel);
+  background: var(--panel-strong);
+}
+
+.session-link.active::before {
+  content: "> ";
+  color: var(--accent);
 }
 
 .chat-panel {
@@ -175,11 +187,17 @@ h2 {
 
 .chat-title {
   font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.chat-title::before {
+  content: ":: ";
+  color: var(--muted);
 }
 
 .debug-pill {
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: 0;
   color: var(--muted);
   margin-left: 0.5rem;
   padding: 0 0.35rem;
@@ -203,12 +221,12 @@ h2 {
 .error,
 .info {
   border: 1px solid;
-  border-radius: 0.5rem;
+  border-radius: 0;
   margin: 0.75rem auto 0;
   max-width: 900px;
   padding: 0.55rem 0.7rem;
   background: var(--panel);
-  box-shadow: var(--shadow);
+  box-shadow: none;
   animation: notice-fade 6s ease both;
 }
 
@@ -236,8 +254,19 @@ h2 {
 
 .blank-state h2 {
   font-size: clamp(2rem, 7vw, 4rem);
-  font-weight: 750;
-  letter-spacing: -0.06em;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.blank-state h2::before {
+  content: "/";
+  color: var(--muted);
+}
+
+.blank-state h2::after {
+  content: "/";
+  color: var(--muted);
 }
 
 .messages {
@@ -255,9 +284,9 @@ h2 {
 .message-card {
   width: min(100%, 820px);
   border: 1px solid var(--border);
-  border-radius: 0.75rem;
+  border-radius: 0;
   background: var(--panel);
-  box-shadow: var(--shadow);
+  box-shadow: none;
   padding: 0.75rem;
 }
 
@@ -279,6 +308,16 @@ h2 {
   margin-bottom: 0.55rem;
   padding-bottom: 0.35rem;
   text-transform: lowercase;
+}
+
+.message-meta strong::before {
+  content: "<";
+  color: var(--muted);
+}
+
+.message-meta strong::after {
+  content: ">";
+  color: var(--muted);
 }
 
 pre {
@@ -338,9 +377,9 @@ pre {
   grid-template-columns: 1fr auto;
   gap: 0.5rem;
   border: 1px solid var(--border);
-  border-radius: 0.75rem;
+  border-radius: 0;
   background: var(--panel);
-  box-shadow: var(--shadow);
+  box-shadow: none;
   padding: 0.5rem;
 }
 
@@ -349,8 +388,8 @@ input,
 select {
   width: 100%;
   border: 1px solid var(--border);
-  border-radius: 0.25rem;
-  background: #070910;
+  border-radius: 0;
+  background: #000;
   color: var(--text);
   padding: 0.5rem;
 }
@@ -374,7 +413,7 @@ select:focus {
   max-height: calc(100vh - 2rem);
   overflow: auto;
   border: 1px solid var(--accent);
-  border-radius: 0.75rem;
+  border-radius: 0;
   background: var(--panel);
   color: var(--text);
   padding: 0;
@@ -385,7 +424,7 @@ select:focus {
 }
 
 .modal::backdrop {
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(0, 0, 0, 0.72);
 }
 
 .modal-heading {
@@ -398,6 +437,16 @@ select:focus {
 
 .panel {
   padding: 1rem;
+}
+
+.panel h2 {
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.panel h2::before {
+  content: "// ";
+  color: var(--muted);
 }
 
 .panel label,
@@ -415,7 +464,7 @@ select:focus {
   display: grid;
   gap: 0.65rem;
   border: 1px solid var(--border);
-  border-radius: 0.75rem;
+  border-radius: 0;
   margin: 0.75rem 0 0;
   padding: 0.75rem;
 }
@@ -425,7 +474,7 @@ select:focus {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.65rem;
   border: 1px solid var(--border);
-  border-radius: 0.5rem;
+  border-radius: 0;
   padding: 0.75rem;
 }
 
@@ -433,6 +482,8 @@ select:focus {
 .param-section legend,
 .extra-config legend {
   color: var(--muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .params-grid legend a {
@@ -447,7 +498,7 @@ select:focus {
 
 .extra-config {
   border: 1px solid var(--border);
-  border-radius: 0.5rem;
+  border-radius: 0;
   margin: 0.5rem 0 0;
   padding: 0.75rem;
 }
