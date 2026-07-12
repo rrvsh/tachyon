@@ -66,7 +66,7 @@
       let apiKey = localStorage.getItem("openrouterApiKey") || "";
       let model = localStorage.getItem("openrouterModel") || "tencent/hy3:free";
       let currentSession = null;
-      let activeController = null;
+      const activeStreams = new Map();
 
       function setSessionIdInUrl(sessionId) {
         const url = new URL(location.href);
@@ -126,13 +126,17 @@
         return currentSession;
       }
 
-      function render() {
-        sendButton.textContent = activeController ? "Abort" : "Send";
+      function renderSendButton() {
+        sendButton.textContent = currentSession?.id && activeStreams.has(currentSession.id) ? "Abort" : "Send";
+      }
 
+      function renderOutput() {
         output.textContent = (currentSession?.messages || [])
           .map((message) => `${message.role}: ${message.content}`)
           .join("\n\n");
+      }
 
+      function renderSessionList() {
         sessionList.textContent = "";
 
         Object.keys(localStorage)
@@ -171,6 +175,12 @@
           });
       }
 
+      function render() {
+        renderSendButton();
+        renderOutput();
+        renderSessionList();
+      }
+
       settingsButton.addEventListener("click", () => {
         apiKeyInput.value = apiKey;
         modelInput.value = model;
@@ -202,8 +212,8 @@
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
 
-        if (activeController) {
-          activeController.abort();
+        if (currentSession?.id && activeStreams.has(currentSession.id)) {
+          activeStreams.get(currentSession.id).controller.abort();
           return;
         }
 
@@ -217,17 +227,26 @@
         const prompt = promptInput.value.trim();
         const requestMessages = prompt ? [...(currentSession?.messages || []), { role: "user", content: prompt }] : currentSession?.messages || [];
         const streamingSession = createOrUpdateCurrentSession([...requestMessages, { role: "assistant", content: "" }]);
+        const streamingSessionId = streamingSession.id;
         const assistantMessage = streamingSession.messages[streamingSession.messages.length - 1];
+        const controller = new AbortController();
         let lastSave = 0;
 
         saveCurrentSession();
-        activeController = new AbortController();
+        activeStreams.set(streamingSessionId, { controller, session: streamingSession });
         render();
         promptInput.value = "";
 
+        const renderStreamingOutput = () => {
+          if (currentSession?.id === streamingSessionId) {
+            currentSession = streamingSession;
+            renderOutput();
+          }
+        };
+
         const saveStreamingSession = () => {
           streamingSession.updatedAt = new Date().toISOString();
-          localStorage.setItem(`session:${streamingSession.id}`, JSON.stringify(streamingSession));
+          localStorage.setItem(`session:${streamingSessionId}`, JSON.stringify(streamingSession));
         };
 
         try {
@@ -244,7 +263,7 @@
               messages: requestMessages,
               stream: true
             }),
-            signal: activeController.signal
+            signal: controller.signal
           });
 
           if (!response.ok) {
@@ -306,7 +325,7 @@
               }
 
               assistantMessage.content += chunk.choices?.[0]?.delta?.content || "";
-              render();
+              renderStreamingOutput();
 
               if (Date.now() - lastSave >= 500) {
                 saveStreamingSession();
@@ -324,8 +343,13 @@
             errorDialog.showModal();
           }
         } finally {
-          activeController = null;
+          activeStreams.delete(streamingSessionId);
           saveStreamingSession();
+
+          if (currentSession?.id === streamingSessionId) {
+            currentSession = streamingSession;
+          }
+
           render();
         }
       });
