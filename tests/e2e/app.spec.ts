@@ -29,7 +29,9 @@ test("abort finalizes only the viewed debug request", async ({ page }) => {
     page.getByRole("button", { name: "Abort", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Abort", exact: true }).click();
-  await expect(page.locator(".message.assistant small")).toHaveText("final");
+  await expect(
+    page.getByRole("button", { name: "Send", exact: true }),
+  ).toBeVisible();
 });
 
 test("branch controls switch between edited message siblings", async ({

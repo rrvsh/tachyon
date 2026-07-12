@@ -1,15 +1,15 @@
 :root {
-  color-scheme: light;
-  --bg: #f8f8f5;
-  --panel: #ffffff;
-  --panel-strong: #f0f0eb;
-  --text: #151515;
-  --muted: #6b6b63;
-  --border: #d7d7ce;
-  --accent: #111111;
-  --accent-strong: #000000;
-  --danger: #b42318;
-  --shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+  color-scheme: dark;
+  --bg: #05060a;
+  --panel: #0b0d13;
+  --panel-strong: #10131c;
+  --text: #f4f7fb;
+  --muted: #8b93a7;
+  --border: #242936;
+  --accent: #8ab4ff;
+  --accent-strong: #c9dcff;
+  --danger: #ff7b72;
+  --shadow: 0 18px 55px rgba(0, 0, 0, 0.35);
 }
 
 * {
@@ -41,7 +41,7 @@ textarea {
 button,
 .import-button {
   border: 1px solid var(--border);
-  border-radius: 0.5rem;
+  border-radius: 0.25rem;
   background: var(--panel);
   color: var(--text);
   cursor: pointer;
@@ -68,7 +68,7 @@ button:focus-visible,
 .send-button {
   border-color: var(--accent);
   background: var(--accent);
-  color: var(--panel);
+  color: #030409;
 }
 
 .ghost-button {
@@ -274,7 +274,7 @@ h2 {
 }
 
 .message-meta {
-  justify-content: space-between;
+  justify-content: flex-start;
   border-bottom: 1px solid var(--border);
   margin-bottom: 0.55rem;
   padding-bottom: 0.35rem;
@@ -295,11 +295,11 @@ pre {
 }
 
 .message.user .message-controls {
-  justify-content: flex-start;
+  justify-content: flex-end;
 }
 
 .message.assistant .message-controls {
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 .message-card:hover .message-controls,
@@ -349,8 +349,8 @@ input,
 select {
   width: 100%;
   border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  background: var(--panel);
+  border-radius: 0.25rem;
+  background: #070910;
   color: var(--text);
   padding: 0.5rem;
 }
