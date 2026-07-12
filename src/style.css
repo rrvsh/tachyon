@@ -1,0 +1,56 @@
+body {
+  font-family: system-ui, sans-serif;
+  margin: 0;
+}
+header {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.5rem;
+  border-bottom: 1px solid #ccc;
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(10rem, 18rem) 1fr minmax(12rem, 22rem);
+  gap: 1rem;
+  padding: 1rem;
+}
+textarea {
+  width: 100%;
+  min-height: 5rem;
+}
+.messages {
+  list-style: none;
+  padding: 0;
+}
+.message {
+  border: 1px solid #ccc;
+  margin: 0.5rem 0;
+  padding: 0.5rem;
+}
+.assistant {
+  background: #f7f7ff;
+}
+.user {
+  background: #f8fff7;
+}
+pre {
+  white-space: pre-wrap;
+}
+.error {
+  color: #900;
+}
+button,
+input,
+select,
+textarea {
+  margin: 0.2rem;
+}
+aside {
+  overflow: auto;
+}
+@media (max-width: 800px) {
+  .layout {
+    display: block;
+  }
+}
