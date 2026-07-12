@@ -3,10 +3,7 @@
   <body>
     <form id="form">
       <div>
-        <label>
-          API key
-          <input id="apiKey" type="password" required>
-        </label>
+        <button id="settingsButton" type="button">Settings</button>
       </div>
 
       <div>
@@ -26,17 +23,63 @@
       <button>Send</button>
     </form>
 
+    <dialog id="settingsDialog">
+      <form method="dialog">
+        <div>
+          <label>
+            API key
+            <input id="apiKeyInput" type="password">
+          </label>
+        </div>
+
+        <button id="saveSettingsButton" type="button">Save</button>
+        <button type="submit">Cancel</button>
+      </form>
+    </dialog>
+
+    <dialog id="errorDialog">
+      <form method="dialog">
+        <p id="errorMessage"></p>
+        <button type="submit">OK</button>
+      </form>
+    </dialog>
+
     <pre id="output"></pre>
 
     <script>
       const form = document.getElementById("form");
       const output = document.getElementById("output");
+      const settingsButton = document.getElementById("settingsButton");
+      const settingsDialog = document.getElementById("settingsDialog");
+      const apiKeyInput = document.getElementById("apiKeyInput");
+      const saveSettingsButton = document.getElementById("saveSettingsButton");
+      const errorDialog = document.getElementById("errorDialog");
+      const errorMessage = document.getElementById("errorMessage");
+
+      let apiKey = localStorage.getItem("openrouterApiKey") || "";
+
+      settingsButton.addEventListener("click", () => {
+        apiKeyInput.value = apiKey;
+        settingsDialog.showModal();
+      });
+
+      saveSettingsButton.addEventListener("click", () => {
+        apiKey = apiKeyInput.value;
+        localStorage.setItem("openrouterApiKey", apiKey);
+        settingsDialog.close();
+      });
 
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
+
+        if (!apiKey) {
+          errorMessage.textContent = "API key is missing. Add it in Settings.";
+          errorDialog.showModal();
+          return;
+        }
+
         output.textContent = "Loading...";
 
-        const apiKey = document.getElementById("apiKey").value;
         const model = document.getElementById("model").value;
         const prompt = document.getElementById("prompt").value;
 
