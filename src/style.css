@@ -191,6 +191,7 @@ h2 {
 }
 
 .chat-header {
+  justify-content: flex-end;
   border-bottom: 1px solid var(--border);
   background: var(--panel);
   padding: 0.55rem 0.75rem;
@@ -239,6 +240,13 @@ h2 {
   background: var(--panel);
   box-shadow: none;
   animation: notice-fade 6s ease both;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.error.dismissing,
+.info.dismissing {
+  animation: notice-dismiss 180ms ease both;
 }
 
 .error {
@@ -284,17 +292,19 @@ h2 {
 .messages {
   display: grid;
   gap: 1rem;
-  max-width: 920px;
-  margin: 0 auto;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.message.user {
-  display: flex;
-  justify-content: flex-end;
+.message {
+  display: block;
+  width: 100%;
 }
 
 .message-card {
-  width: min(100%, 820px);
+  width: 100%;
   border: 1px solid var(--border);
   border-radius: 0;
   background: var(--panel);
@@ -303,7 +313,6 @@ h2 {
 }
 
 .message.user .message-card {
-  width: min(90%, 720px);
   background: var(--panel-strong);
 }
 
@@ -312,6 +321,38 @@ h2 {
 .message-actions,
 .branch-controls {
   gap: 0.4rem;
+}
+
+.branch-controls {
+  min-width: 5ch;
+  justify-content: flex-end;
+  gap: 1ch;
+}
+
+.branch-arrow {
+  width: 1ch;
+  min-width: 1ch;
+  min-height: auto;
+  padding: 0;
+}
+
+.branch-arrow-placeholder {
+  display: inline-grid;
+  place-items: center;
+  min-height: 2rem;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.branch-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 2rem;
+  color: var(--text);
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+  opacity: 0.65;
+  text-align: center;
 }
 
 .message-meta {
@@ -323,13 +364,12 @@ h2 {
 }
 
 .message-meta strong::before {
-  content: "<";
+  content: "> ";
   color: var(--muted);
 }
 
 .message-meta strong::after {
-  content: ">";
-  color: var(--muted);
+  content: "";
 }
 
 pre {
@@ -341,25 +381,35 @@ pre {
 }
 
 .message-controls {
-  margin-top: 0.65rem;
-  opacity: 0.65;
-}
-
-.message.user .message-controls {
   justify-content: flex-end;
+  margin-top: 0.65rem;
+  pointer-events: none;
 }
 
-.message.assistant .message-controls {
-  justify-content: flex-start;
+.message-edit-textarea {
+  min-height: 3rem;
+  width: 100%;
+  resize: vertical;
 }
 
-.message-card:hover .message-controls,
-.message-card:focus-within .message-controls {
+.deleted-message {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.message-controls .icon-button {
+  opacity: 0.65;
+  pointer-events: auto;
+}
+
+.message-controls .icon-button:hover,
+.message-controls .icon-button:focus-visible {
   opacity: 1;
 }
 
 .borderless-icon,
 .header-actions .icon-button,
+.composer-context .icon-button,
 .message-controls .icon-button {
   border-color: transparent;
   background: transparent;
@@ -368,9 +418,38 @@ pre {
 
 .borderless-icon:hover,
 .header-actions .icon-button:hover,
+.composer-context .icon-button:hover,
 .message-controls .icon-button:hover {
   border-color: transparent;
   background: transparent;
+}
+
+.composer-context .icon-button,
+.composer-agent-label,
+.composer-agent-label select {
+  opacity: 0.65;
+}
+
+.composer-context .icon-button:hover,
+.composer-context .icon-button:focus-visible,
+.composer-agent-label:focus-within,
+.composer-agent-label:hover {
+  opacity: 1;
+}
+
+.composer-agent-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.composer-agent-label select {
+  width: auto;
+  border-color: transparent;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  padding: 0;
 }
 
 .composer {
@@ -381,7 +460,30 @@ pre {
 }
 
 .composer-context {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   padding-bottom: 0.35rem;
+}
+
+.thinking-block {
+  border: 1px solid var(--border);
+  margin-bottom: 0.75rem;
+  padding: 0.5rem;
+  color: var(--muted);
+}
+
+.thinking-block summary {
+  cursor: pointer;
+  color: var(--text);
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+}
+
+.thinking-block pre {
+  margin-top: 0.5rem;
 }
 
 .composer-box {
@@ -576,6 +678,17 @@ select:focus {
     transform: translateY(0);
   }
   100% {
+    opacity: 0;
+    transform: translateY(-0.4rem);
+  }
+}
+
+@keyframes notice-dismiss {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
     opacity: 0;
     transform: translateY(-0.4rem);
   }

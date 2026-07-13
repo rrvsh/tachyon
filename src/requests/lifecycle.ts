@@ -124,7 +124,7 @@ export async function startRequest(input: {
     const contextRecords = [
       ...path,
       ...requestMessages.filter((m) => m.role === "user"),
-    ];
+    ].filter((m) => !m.deletedAt);
     const context: OpenRouterMessage[] = contextRecords.map((m) => ({
       role: m.role,
       content: m.content,
@@ -159,7 +159,13 @@ export async function startRequest(input: {
           if (!current || current.finalized) return;
           const updated = {
             ...current,
-            content: current.content + delta,
+            content: current.content + (delta.content ?? ""),
+            reasoning: delta.reasoning
+              ? (current.reasoning ?? "") + delta.reasoning
+              : current.reasoning,
+            reasoningDetails: delta.reasoningDetails?.length
+              ? [...(current.reasoningDetails ?? []), ...delta.reasoningDetails]
+              : current.reasoningDetails,
             updatedAt: Date.now(),
           };
           await putOne("messages", updated);

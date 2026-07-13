@@ -17,6 +17,45 @@ test("debug mode can create and stream a session", async ({ page }) => {
   );
 });
 
+test("ctrl enter sends the prompt", async ({ page }) => {
+  await page.goto("/?debug=1&debugDelay=0");
+  await page
+    .getByPlaceholder("Message (empty for assistant-only)")
+    .fill("keyboard send");
+  await page.keyboard.press("Control+Enter");
+  await expect(page.locator(".message.user")).toContainText("keyboard send");
+});
+
+test("clicking errors fades and dismisses them", async ({ page }) => {
+  await page.goto("/?debug=1&debugDelay=0&debugError=1");
+  await page
+    .getByPlaceholder("Message (empty for assistant-only)")
+    .fill("error please");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.locator(".notices .error")).toContainText(
+    "Simulated debug transport error",
+  );
+  await page.locator(".notices .error").click();
+  await expect(page.locator(".notices .error")).toHaveCount(0);
+});
+
+test("ctrl enter halts an inflight prompt", async ({ page }) => {
+  await page.goto(
+    "/?debug=1&debugDelay=100&debugText=one%20two%20three%20four%20five",
+  );
+  await page
+    .getByPlaceholder("Message (empty for assistant-only)")
+    .fill("halt with keyboard");
+  await page.keyboard.press("Control+Enter");
+  await expect(
+    page.getByRole("button", { name: "Abort", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Control+Enter");
+  await expect(
+    page.getByRole("button", { name: "Send", exact: true }),
+  ).toBeVisible();
+});
+
 test("abort finalizes only the viewed debug request", async ({ page }) => {
   await page.goto(
     "/?debug=1&debugDelay=100&debugText=one%20two%20three%20four%20five",
@@ -34,7 +73,27 @@ test("abort finalizes only the viewed debug request", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("branch controls switch between edited message siblings", async ({
+test("streaming assistant messages hide controls until finalized", async ({
+  page,
+}) => {
+  await page.goto("/?debug=1&debugDelay=20&debugText=one%20two%20three");
+  await page
+    .getByPlaceholder("Message (empty for assistant-only)")
+    .fill("stream controls");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.locator(".message.assistant")).toBeVisible();
+  await expect(
+    page.locator(".message.assistant .message-controls"),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Send", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.locator(".message.assistant .message-controls"),
+  ).toHaveCount(1);
+});
+
+test("inline edit creates variants and branch controls switch siblings", async ({
   page,
 }) => {
   await page.goto("/?debug=1&debugDelay=0&debugText=first");
@@ -44,17 +103,91 @@ test("branch controls switch between edited message siblings", async ({
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.locator(".message.assistant")).toContainText("first");
 
-  page.once("dialog", async (dialog) => dialog.accept("branch edited"));
   await page
     .locator(".message.user")
     .getByRole("button", { name: "Edit", exact: true })
     .click();
+  await expect(page.locator(".message.user textarea")).toHaveValue(
+    "branch base",
+  );
+  await page.locator(".message.user textarea").fill("branch edited");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.locator(".message.user")).toContainText("branch edited");
   await expect(page.locator(".message.user")).toContainText("2/2");
+  await expect(page.locator(".message.assistant")).toContainText("first");
 
   await page.locator(".message.user [data-branch-prev]").click();
   await expect(page.locator(".message.user")).toContainText("branch base");
   await expect(page.locator(".message.user")).toContainText("1/2");
+});
+
+test("copy and tombstone delete keep descendants visible", async ({
+  context,
+  page,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/?debug=1&debugDelay=0&debugText=child");
+  await page
+    .getByPlaceholder("Message (empty for assistant-only)")
+    .fill("delete parent");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.locator(".message.assistant")).toContainText("child");
+
+  await page
+    .locator(".message.user")
+    .getByRole("button", { name: "Copy", exact: true })
+    .click();
+  await expect(
+    page.locator(".message.user").getByRole("button", { name: "copied!" }),
+  ).toBeVisible();
+
+  await page
+    .locator(".message.user")
+    .getByRole("button", { name: "Delete", exact: true })
+    .click();
+  await expect(page.locator(".message.user")).toContainText("deleted message");
+  await expect(page.locator(".message.user")).toContainText(
+    "restore deleted message",
+  );
+  await expect(page.locator(".message.assistant")).toContainText("child");
+
+  await page.getByRole("button", { name: "Restore deleted message" }).click();
+  await expect(page.locator(".message.user")).toContainText("delete parent");
+});
+
+test("copy conversation uses visible content and omits deleted thinking", async ({
+  context,
+  page,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto(
+    "/?debug=1&debugDelay=0&debugText=%3Cthink%3Ehidden%3C%2Fthink%3Evisible",
+  );
+  await page
+    .getByPlaceholder("Message (empty for assistant-only)")
+    .fill("copy thread");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.locator(".message.assistant")).toContainText("visible");
+  await expect(page.locator(".thinking-block")).toContainText("hidden");
+
+  await page
+    .locator(".message.user")
+    .getByRole("button", { name: "Delete", exact: true })
+    .click();
+  await page
+    .locator(".composer")
+    .getByRole("button", { name: "Copy conversation", exact: true })
+    .click();
+  await expect(
+    page.locator(".composer").getByRole("button", { name: "copied!" }),
+  ).toBeVisible();
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toContain("session:");
+  expect(copied).not.toContain("messages:");
+  expect(copied).toContain("assistant:\nvisible");
+  expect(copied).not.toContain("copy thread");
+  expect(copied).not.toContain("hidden");
+  expect(copied).not.toContain("deleted message");
 });
 
 test("import and export flow uses canonical JSON records", async ({ page }) => {

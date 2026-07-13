@@ -52,6 +52,24 @@ export function validateMessage(value: unknown): value is MessageRecord {
     typeof value.finalized !== "boolean"
   )
     return false;
+  if (
+    "deletedAt" in value &&
+    value.deletedAt !== undefined &&
+    !hasNumber(value, "deletedAt")
+  )
+    return false;
+  if (
+    "reasoning" in value &&
+    value.reasoning !== undefined &&
+    typeof value.reasoning !== "string"
+  )
+    return false;
+  if (
+    "reasoningDetails" in value &&
+    value.reasoningDetails !== undefined &&
+    !Array.isArray(value.reasoningDetails)
+  )
+    return false;
   return value.role === "assistant" || value.finalized === true;
 }
 

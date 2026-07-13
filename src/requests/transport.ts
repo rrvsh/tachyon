@@ -4,10 +4,16 @@ export interface TransportRequest {
   signal: AbortSignal;
 }
 
+export interface TransportDelta {
+  content?: string;
+  reasoning?: string;
+  reasoningDetails?: unknown[];
+}
+
 export interface Transport {
   stream(
     request: TransportRequest,
-    onDelta: (delta: string) => Promise<void> | void,
+    onDelta: (delta: TransportDelta) => Promise<void> | void,
   ): Promise<void>;
 }
 

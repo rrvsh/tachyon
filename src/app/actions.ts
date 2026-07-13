@@ -2,7 +2,7 @@ import { makeAgent } from "../agents/agents";
 import { createExport, importFile } from "../data/importExport";
 import { getMessagesBySession, getOne, putOne, transactPut } from "../data/db";
 import type { AgentRecord, MessageRecord, SessionRecord } from "../data/schema";
-import { editInPlace, copyPathToNewSession } from "../messages/operations";
+import { copyPathToNewSession, editWithSubtree } from "../messages/operations";
 import { latestDescendant, latestLeaf, pathToMessage } from "../messages/tree";
 import { abortRequest, hasInflight, startRequest } from "../requests/lifecycle";
 import {
@@ -79,14 +79,40 @@ export async function selectBranch(messageId: string): Promise<void> {
 export async function editMessage(
   targetId: string,
   content: string,
+  resend = false,
 ): Promise<void> {
   const sid = sessionIdFromUrl();
   if (!sid) return;
   const messages = await getMessagesBySession(sid);
   const current = (await currentMessageId()) ?? targetId;
-  const result = editInPlace(messages, current, targetId, content);
+  const result = editWithSubtree(messages, current, targetId, content, !resend);
   await transactPut({ messages: result.newMessages });
   setCurrentPointer(sid, result.selectedId);
+  if (resend) {
+    try {
+      await startRequest({
+        sessionId: sid,
+        parentId: result.selectedId,
+        text: "",
+        notify,
+      });
+    } catch (error) {
+      notify(error instanceof Error ? error.message : String(error), "error");
+    }
+  }
+}
+
+export async function deleteMessage(
+  targetId: string,
+  deleted: boolean,
+): Promise<void> {
+  const target = await getOne<MessageRecord>("messages", targetId);
+  if (!target) return;
+  await putOne("messages", {
+    ...target,
+    deletedAt: deleted ? Date.now() : undefined,
+    updatedAt: Date.now(),
+  });
 }
 
 export async function forkMessage(

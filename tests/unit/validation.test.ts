@@ -19,6 +19,21 @@ describe("validation", () => {
         finalized: false,
       }),
     ).toBe(false));
+  it("accepts tombstoned messages", () =>
+    expect(
+      validateMessage({
+        id: "m",
+        sessionId: "s",
+        role: "assistant",
+        content: "hidden",
+        parentId: null,
+        createdAt: 1,
+        updatedAt: 2,
+        finalized: true,
+        deletedAt: 2,
+      }),
+    ).toBe(true));
+
   it("rejects request-owned agent params", () => {
     const agent = {
       ...defaultAgent(),

@@ -35,10 +35,32 @@ export const openRouterTransport: Transport = {
         const data = trimmed.slice(5).trim();
         if (data === "[DONE]") return;
         const json = JSON.parse(data) as {
-          choices?: { delta?: { content?: string } }[];
+          choices?: {
+            delta?: {
+              content?: string;
+              reasoning?: string;
+              reasoning_content?: string;
+              thinking?: string;
+              reasoning_details?: unknown[];
+            };
+          }[];
         };
-        const delta = json.choices?.[0]?.delta?.content;
-        if (delta) await onDelta(delta);
+        const delta = json.choices?.[0]?.delta;
+        if (!delta) continue;
+        if (
+          delta.content ||
+          delta.reasoning ||
+          delta.reasoning_content ||
+          delta.thinking ||
+          delta.reasoning_details
+        ) {
+          await onDelta({
+            content: delta.content,
+            reasoning:
+              delta.reasoning ?? delta.reasoning_content ?? delta.thinking,
+            reasoningDetails: delta.reasoning_details,
+          });
+        }
       }
     }
   },

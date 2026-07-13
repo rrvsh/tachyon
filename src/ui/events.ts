@@ -3,6 +3,7 @@ import {
   archiveAgent,
   archiveSession,
   currentSettings,
+  deleteMessage,
   editMessage,
   exportJson,
   forkMessage,
@@ -16,7 +17,8 @@ import {
   updateSettings,
   viewedHasInflight,
 } from "../app/actions";
-import { loadState } from "../app/state";
+import { clearNotice, loadState } from "../app/state";
+import { normalizeMessageForDisplay } from "../messages/display";
 import { siblings } from "../messages/tree";
 import { applyFontFamily } from "../settings/settings";
 
@@ -62,6 +64,15 @@ export function bindEvents(app: HTMLElement): void {
       target.closest("dialog")?.close();
       return;
     }
+    const dismiss = target.getAttribute("data-dismiss-notice");
+    if (dismiss) {
+      const [kind, index] = dismiss.split(":");
+      if ((kind === "error" || kind === "info") && index) {
+        target.classList.add("dismissing");
+        window.setTimeout(() => clearNotice(Number(index), kind), 180);
+      }
+      return;
+    }
     const dialogId = target.getAttribute("data-open-dialog");
     if (dialogId) return openDialog(dialogId);
     if (target.matches("[data-add-param]")) return addExtraParamRow(app);
@@ -84,25 +95,50 @@ export function bindEvents(app: HTMLElement): void {
       populateAgentForm(target);
       return openDialog("agents-dialog");
     }
+    if (target.matches("[data-copy-conversation]"))
+      return void copyConversationText(target);
+    const copy = target.getAttribute("data-copy");
+    if (copy) return void copyMessageText(copy, target);
     const edit = target.getAttribute("data-edit");
     if (edit) {
-      const content = prompt("New content?");
-      if (content !== null) await editMessage(edit, content);
+      const state = await loadState();
+      const message = state.messages.find((m) => m.id === edit);
+      const content = target
+        .closest<HTMLElement>(".message-card")
+        ?.querySelector<HTMLElement>("[data-message-content]");
+      app.dataset.editingMessageId = edit;
+      app.dataset.editingDraft = message?.content ?? "";
+      app.dataset.editingHeight = String(
+        Math.max(48, Math.ceil(content?.getBoundingClientRect().height ?? 128)),
+      );
+      return refresh();
+    }
+    const cancelEdit = target.hasAttribute("data-cancel-edit");
+    if (cancelEdit) {
+      clearEditing(app);
+      return refresh();
+    }
+    const saveEdit = target.getAttribute("data-save-edit");
+    const saveResend = target.getAttribute("data-save-resend");
+    if (saveEdit || saveResend) {
+      const id = saveEdit || saveResend!;
+      const textarea = app.querySelector<HTMLTextAreaElement>(
+        `[data-edit-textarea="${CSS.escape(id)}"]`,
+      );
+      await editMessage(
+        id,
+        textarea?.value ?? app.dataset.editingDraft ?? "",
+        !!saveResend,
+      );
+      clearEditing(app);
       return refresh();
     }
     const fork = target.getAttribute("data-fork");
     if (fork) return void forkMessage(fork).then(refresh);
-    const editFork = target.getAttribute("data-edit-fork");
-    if (editFork) {
-      const content = prompt("Edited fork content?");
-      if (content !== null)
-        await forkMessage(
-          editFork,
-          content,
-          confirm("Resend from edited message?"),
-        );
-      return refresh();
-    }
+    const del = target.getAttribute("data-delete");
+    if (del) return void deleteMessage(del, true).then(refresh);
+    const restore = target.getAttribute("data-restore");
+    if (restore) return void deleteMessage(restore, false).then(refresh);
     const regen = target.getAttribute("data-regenerate");
     if (regen) return void regenerate(regen).then(refresh);
     const prev = target.getAttribute("data-branch-prev");
@@ -113,8 +149,9 @@ export function bindEvents(app: HTMLElement): void {
       if (!current) return;
       const sibs = siblings(state.messages, current);
       const idx = sibs.findIndex((s) => s.id === current.id);
-      const selected =
-        sibs[(idx + (prev ? -1 : 1) + sibs.length) % sibs.length];
+      const selected = sibs[idx + (prev ? -1 : 1)];
+      if (!selected) return;
+      preserveVariantScroll(app, target, selected.id, event);
       await selectBranch(selected.id);
       return refresh();
     }
@@ -140,11 +177,43 @@ export function bindEvents(app: HTMLElement): void {
       refresh();
     }
   });
+  app.addEventListener("keydown", async (event) => {
+    const target = event.target as HTMLElement;
+    if (!(event.ctrlKey || event.metaKey) || event.key !== "Enter") return;
+    if (target.matches("[data-edit-textarea]")) {
+      event.preventDefault();
+      const id = (target as HTMLTextAreaElement).dataset.editTextarea;
+      if (!id) return;
+      const selector = event.shiftKey ? "data-save-resend" : "data-save-edit";
+      app
+        .querySelector<HTMLElement>(`[${selector}="${CSS.escape(id)}"]`)
+        ?.click();
+      return;
+    }
+    if (target.matches(".composer textarea")) {
+      event.preventDefault();
+      target.closest<HTMLFormElement>("form")?.requestSubmit();
+    }
+  });
   app.addEventListener("input", (event) => {
-    previewFontChange(event.target as HTMLElement);
+    const target = event.target as HTMLElement;
+    if (target.matches("[data-edit-textarea]")) {
+      app.dataset.editingDraft = (target as HTMLTextAreaElement).value;
+    }
+    previewFontChange(target);
   });
   app.addEventListener("change", async (event) => {
     const target = event.target as HTMLElement;
+    if (target.matches("[data-composer-agent]")) {
+      const settings = currentSettings();
+      updateSettings(
+        settings.apiKey,
+        (target as HTMLSelectElement).value || null,
+        settings.fontFamily,
+      );
+      refresh();
+      return;
+    }
     if (target.matches('[data-action="import"]')) {
       const input = target as HTMLInputElement;
       if (input.files?.[0]) {
@@ -161,18 +230,86 @@ export function bindEvents(app: HTMLElement): void {
       const api = (
         root.querySelector("[data-setting-api-key]") as HTMLInputElement
       ).value;
-      const agent =
-        (root.querySelector("[data-setting-agent]") as HTMLSelectElement)
-          .value || null;
       const font = (
         root.querySelector("[data-setting-font]") as HTMLSelectElement
       ).value;
-      updateSettings(api, agent, font);
+      updateSettings(api, currentSettings().selectedAgentId, font);
       if (root instanceof HTMLDialogElement)
         root.dataset.settingsSaved = "true";
       refresh();
     }
   });
+}
+
+function preserveVariantScroll(
+  app: HTMLElement,
+  target: HTMLElement,
+  nextMessageId: string,
+  event: MouseEvent,
+): void {
+  const row = target.closest<HTMLElement>("[data-message-id]");
+  if (!row) return;
+  const rect = row.getBoundingClientRect();
+  app.dataset.preserveScrollMessageId = nextMessageId;
+  app.dataset.preserveScrollViewportY = String(event.clientY);
+  app.dataset.preserveScrollOffsetY = String(event.clientY - rect.top);
+}
+
+function clearEditing(app: HTMLElement): void {
+  delete app.dataset.editingMessageId;
+  delete app.dataset.editingDraft;
+  delete app.dataset.editingHeight;
+}
+
+async function copyMessageText(id: string, target: HTMLElement): Promise<void> {
+  const state = await loadState();
+  const message = state.messages.find((m) => m.id === id);
+  if (!message) return;
+  await writeClipboard(normalizeMessageForDisplay(message).visibleContent);
+  flashCopied(target);
+}
+
+async function copyConversationText(target: HTMLElement): Promise<void> {
+  const state = await loadState();
+  const messages = state.visible.filter((m) => !m.deletedAt);
+  const body = messages
+    .map((message) => {
+      const content = normalizeMessageForDisplay(message).visibleContent.trim();
+      return `${message.role}:\n${content}`;
+    })
+    .join("\n\n");
+  const metadata = [
+    `session: ${state.session?.id ?? "new session"}`,
+    `copied: ${new Date().toISOString()}`,
+  ].join("\n");
+  await writeClipboard(`${metadata}\n\n${body}`.trimEnd());
+  flashCopied(target);
+}
+
+async function writeClipboard(text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.append(textarea);
+    textarea.select();
+    document.execCommand("copy");
+    textarea.remove();
+  }
+}
+
+function flashCopied(target: HTMLElement): void {
+  const previous = target.textContent ?? "copy";
+  const previousLabel = target.getAttribute("aria-label");
+  target.textContent = "copied!";
+  target.setAttribute("aria-label", "copied!");
+  window.setTimeout(() => {
+    target.textContent = previous;
+    if (previousLabel) target.setAttribute("aria-label", previousLabel);
+  }, 900);
 }
 
 function previewFontChange(target: HTMLElement): void {
@@ -187,12 +324,8 @@ function resetSettingsDialog(dialog: HTMLDialogElement): void {
   const api = dialog.querySelector(
     "[data-setting-api-key]",
   ) as HTMLInputElement;
-  const agent = dialog.querySelector(
-    "[data-setting-agent]",
-  ) as HTMLSelectElement;
   const font = dialog.querySelector("[data-setting-font]") as HTMLSelectElement;
   api.value = settings.apiKey;
-  agent.value = settings.selectedAgentId ?? "";
   font.value = settings.fontFamily;
   applyFontFamily(settings.fontFamily);
 }

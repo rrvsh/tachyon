@@ -18,6 +18,9 @@ export interface MessageRecord {
   createdAt: number;
   updatedAt: number;
   finalized: boolean;
+  deletedAt?: number;
+  reasoning?: string;
+  reasoningDetails?: unknown[];
 }
 
 export interface AgentRecord {

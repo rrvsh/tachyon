@@ -1,5 +1,6 @@
 import type { AgentRecord } from "../data/schema";
 import type { AppState } from "../app/state";
+import { normalizeMessageForDisplay } from "../messages/display";
 import { siblings } from "../messages/tree";
 import { currentSettings, viewedHasInflight } from "../app/actions";
 import { FONT_OPTIONS } from "../settings/settings";
@@ -401,10 +402,14 @@ export function render(app: HTMLElement, state: AppState): void {
   const previousScrollTop = previousConversation?.scrollTop ?? 0;
   const openDialogId = app.querySelector<HTMLDialogElement>("dialog[open]")?.id;
   const sessionChanged = previousSessionId !== nextSessionId;
+  const preserveScrollMessageId = app.dataset.preserveScrollMessageId;
+  const preserveScrollViewportY = Number(app.dataset.preserveScrollViewportY);
+  const preserveScrollOffsetY = Number(app.dataset.preserveScrollOffsetY);
   const shouldAutoScroll =
-    !previousConversation ||
-    sessionChanged ||
-    app.dataset.autoscroll !== "false";
+    !preserveScrollMessageId &&
+    (!previousConversation ||
+      sessionChanged ||
+      app.dataset.autoscroll !== "false");
 
   app.innerHTML = `
     <div class="app-shell">
@@ -422,7 +427,6 @@ export function render(app: HTMLElement, state: AppState): void {
 
       <main class="chat-panel">
         <header class="chat-header">
-          <div class="chat-title">${state.session ? esc(state.session.title) : "new session"}${new URLSearchParams(location.search).has("debug") ? '<span class="debug-pill">debug</span>' : ""}</div>
           <div class="header-actions">
             <button class="icon-button" data-open-dialog="settings-dialog" aria-label="Settings" title="Settings">settings</button>
             <button class="icon-button" data-open-dialog="agents-dialog" aria-label="Agents" title="Agents">agents</button>
@@ -430,9 +434,9 @@ export function render(app: HTMLElement, state: AppState): void {
             <label class="icon-button import-button" aria-label="Import" title="Import">import<input data-action="import" type="file" accept="application/json"></label>
           </div>
         </header>
-        <div class="notices">${state.errors.map((e) => `<p class="error">${esc(e)}</p>`).join("")}${state.info.map((e) => `<p class="info">${esc(e)}</p>`).join("")}</div>
+        <div class="notices">${state.errors.map((e, index) => `<p class="error" data-dismiss-notice="error:${index}" title="Dismiss">${esc(e)}</p>`).join("")}${state.info.map((e, index) => `<p class="info" data-dismiss-notice="info:${index}" title="Dismiss">${esc(e)}</p>`).join("")}</div>
         <section class="conversation">
-          ${state.session ? renderMessages(state) : renderBlankState()}
+          ${state.session ? renderMessages(state, app) : renderBlankState()}
           <div class="scroll-anchor" data-scroll-anchor></div>
         </section>
         ${renderComposer(state)}
@@ -451,7 +455,24 @@ export function render(app: HTMLElement, state: AppState): void {
   if (conversation) {
     bindScrollIntent(app, conversation);
     requestAnimationFrame(() => {
-      if (shouldAutoScroll) {
+      if (preserveScrollMessageId) {
+        conversation.scrollTop = previousScrollTop;
+        const message = app.querySelector<HTMLElement>(
+          `[data-message-id="${CSS.escape(preserveScrollMessageId)}"]`,
+        );
+        if (
+          message &&
+          Number.isFinite(preserveScrollViewportY) &&
+          Number.isFinite(preserveScrollOffsetY)
+        ) {
+          const desiredTop = preserveScrollViewportY - preserveScrollOffsetY;
+          conversation.scrollTop +=
+            message.getBoundingClientRect().top - desiredTop;
+        }
+        delete app.dataset.preserveScrollMessageId;
+        delete app.dataset.preserveScrollViewportY;
+        delete app.dataset.preserveScrollOffsetY;
+      } else if (shouldAutoScroll) {
         scrollToAnchor(app);
         requestAnimationFrame(() => scrollToAnchor(app));
       } else {
@@ -521,26 +542,57 @@ function renderBlankState(): string {
   return `<div class="blank-state" data-testid="blank"><h2>Tachyon</h2></div>`;
 }
 
-function renderMessages(state: AppState): string {
+function renderMessages(state: AppState, app: HTMLElement): string {
+  const editingId = app.dataset.editingMessageId ?? "";
+  const editingDraft = app.dataset.editingDraft;
   return `<ol class="messages">${state.visible
     .map((m) => {
       const sibs = siblings(state.messages, m);
       const idx = sibs.findIndex((s) => s.id === m.id);
+      const prevControl =
+        idx > 0
+          ? `<button class="icon-button borderless-icon branch-arrow" data-branch-prev="${m.id}" aria-label="Previous variant" title="Previous variant">&lt;</button>`
+          : `<span class="branch-arrow branch-arrow-placeholder" aria-hidden="true">&lt;</span>`;
+      const nextControl =
+        idx < sibs.length - 1
+          ? `<button class="icon-button borderless-icon branch-arrow" data-branch-next="${m.id}" aria-label="Next variant" title="Next variant">&gt;</button>`
+          : `<span class="branch-arrow branch-arrow-placeholder" aria-hidden="true">&gt;</span>`;
+      const display = normalizeMessageForDisplay(m);
+      const isStreamingAssistant = m.role === "assistant" && !m.finalized;
       const branchControls =
-        sibs.length > 1
-          ? `<div class="branch-controls"><button class="icon-button borderless-icon" data-branch-prev="${m.id}" aria-label="Previous branch" title="Previous branch">&lt;</button><span>${idx + 1}/${sibs.length}</span><button class="icon-button borderless-icon" data-branch-next="${m.id}" aria-label="Next branch" title="Next branch">&gt;</button></div>`
+        sibs.length > 1 && !isStreamingAssistant
+          ? `<div class="branch-controls">${prevControl}<span class="branch-count">${idx + 1}/${sibs.length}</span>${nextControl}</div>`
           : "";
-      return `<li data-message-id="${m.id}" class="message ${m.role}"><div class="message-card"><div class="message-meta"><strong>${m.role === "assistant" ? "assistant" : "user"}</strong></div><pre data-message-content="${m.id}">${esc(m.content)}</pre><div class="message-controls">${branchControls}<div class="message-actions"><button class="icon-button borderless-icon" data-edit="${m.id}" aria-label="Edit" title="Edit">edit</button><button class="icon-button borderless-icon" data-fork="${m.id}" aria-label="Fork" title="Fork">fork</button><button class="icon-button borderless-icon" data-edit-fork="${m.id}" aria-label="Edit and fork" title="Edit and fork">split</button>${m.role === "assistant" ? `<button class="icon-button borderless-icon" data-regenerate="${m.id}" aria-label="Regenerate" title="Regenerate">redo</button>` : ""}</div></div></div></li>`;
+      const isEditing = editingId === m.id;
+      const content = m.deletedAt
+        ? `<div class="deleted-message">deleted message</div>`
+        : isEditing
+          ? `<textarea class="message-edit-textarea" data-edit-textarea="${m.id}" style="height: ${Number(app.dataset.editingHeight ?? 0) || 128}px" aria-label="Edit message">${esc(editingDraft ?? m.content)}</textarea>`
+          : `${display.thinkingText ? `<details class="thinking-block" ${isStreamingAssistant ? "open" : ""}><summary>thinking</summary><pre>${esc(display.thinkingText)}</pre></details>` : ""}<pre data-message-content="${m.id}">${esc(display.visibleContent)}</pre>`;
+      const controls = m.deletedAt
+        ? `<div class="message-actions"><button class="icon-button borderless-icon restore-button" data-restore="${m.id}" aria-label="Restore deleted message" title="Restore deleted message">restore deleted message</button></div>`
+        : isEditing
+          ? `<div class="message-actions"><button class="icon-button borderless-icon" data-save-edit="${m.id}" aria-label="Save" title="Save">save</button><button class="icon-button borderless-icon" data-save-resend="${m.id}" aria-label="Save and resend" title="Save and resend">save &amp; resend</button><button class="icon-button borderless-icon" data-cancel-edit aria-label="Cancel" title="Cancel">cancel</button></div>`
+          : `<div class="message-actions"><button class="icon-button borderless-icon" data-copy="${m.id}" aria-label="Copy" title="Copy">copy</button><button class="icon-button borderless-icon" data-edit="${m.id}" aria-label="Edit" title="Edit">edit</button><button class="icon-button borderless-icon" data-fork="${m.id}" aria-label="Fork" title="Fork">fork</button><button class="icon-button borderless-icon" data-delete="${m.id}" aria-label="Delete" title="Delete">delete</button>${m.role === "assistant" ? `<button class="icon-button borderless-icon" data-regenerate="${m.id}" aria-label="Redo" title="Redo">redo</button>` : ""}</div>`;
+      return `<li data-message-id="${m.id}" class="message ${m.role}${m.deletedAt ? " deleted" : ""}"><div class="message-card"><div class="message-meta"><strong>${m.role === "assistant" ? "assistant" : "user"}</strong></div>${content}${isStreamingAssistant ? "" : `<div class="message-controls">${branchControls}${controls}</div>`}</div></li>`;
     })
     .join("")}</ol>`;
 }
 
 function renderComposer(state: AppState): string {
   const abort = viewedHasInflight();
-  const agent = state.agents.find(
-    (a) => a.id === currentSettings().selectedAgentId,
-  );
-  return `<form class="composer" data-compose><div class="composer-context">${agent ? `agent: ${esc(agent.name)}` : "agent: none"}</div><div class="composer-box"><textarea name="message" placeholder="Message (empty for assistant-only)"></textarea><button class="icon-button send-button" type="submit" aria-label="${abort ? "Abort" : "Send"}" title="${abort ? "Abort" : "Send"}">${abort ? "halt" : "send"}</button></div></form>`;
+  const settings = currentSettings();
+  const copyButton = state.visible.some((m) => !m.deletedAt)
+    ? `<button class="icon-button borderless-icon" type="button" data-copy-conversation aria-label="Copy conversation" title="Copy conversation">copy conversation</button>`
+    : "";
+  const agentSelect = `<label class="composer-agent-label">agent: <select data-composer-agent aria-label="agent">${state.agents
+    .filter((a) => !a.archived)
+    .map(
+      (a) =>
+        `<option value="${a.id}" ${settings.selectedAgentId === a.id ? "selected" : ""}>${esc(a.name)}</option>`,
+    )
+    .join("")}</select></label>`;
+  return `<form class="composer" data-compose><div class="composer-context">${agentSelect}${copyButton}</div><div class="composer-box"><textarea name="message" placeholder="Message (empty for assistant-only)"></textarea><button class="icon-button send-button" type="submit" aria-label="${abort ? "Abort" : "Send"}" title="${abort ? "Abort" : "Send"}">${abort ? "halt" : "send"}</button></div></form>`;
 }
 
 function renderSettingsDialog(
@@ -551,15 +603,7 @@ function renderSettingsDialog(
   },
   state: AppState,
 ): string {
-  return `<dialog id="settings-dialog" class="modal"><section class="panel"><div class="modal-heading"><h2>settings</h2><button class="icon-button borderless-icon modal-close-button" type="button" data-close-dialog aria-label="Close settings" title="Close settings">×</button></div><label>OpenRouter API key <input data-setting-api-key type="password" value="${esc(settings.apiKey)}" placeholder="sk-or-..."></label><label>agent <select data-setting-agent>${state.agents
-    .filter((a) => !a.archived)
-    .map(
-      (a) =>
-        `<option value="${a.id}" ${settings.selectedAgentId === a.id ? "selected" : ""}>${esc(a.name)}</option>`,
-    )
-    .join(
-      "",
-    )}</select></label><label>font <select data-setting-font>${FONT_OPTIONS.map((option) => `<option value="${attr(option.value)}" style="font-family: ${attr(option.value)}" ${settings.fontFamily === option.value ? "selected" : ""}>${esc(option.label)}</option>`).join("")}</select></label><div class="settings-actions"><button class="primary-button save-settings-button" data-save-settings>save</button></div></section></dialog>`;
+  return `<dialog id="settings-dialog" class="modal"><section class="panel"><div class="modal-heading"><h2>settings</h2><button class="icon-button borderless-icon modal-close-button" type="button" data-close-dialog aria-label="Close settings" title="Close settings">×</button></div><label>OpenRouter API key <input data-setting-api-key type="password" value="${esc(settings.apiKey)}" placeholder="sk-or-..."></label><label>font <select data-setting-font>${FONT_OPTIONS.map((option) => `<option value="${attr(option.value)}" style="font-family: ${attr(option.value)}" ${settings.fontFamily === option.value ? "selected" : ""}>${esc(option.label)}</option>`).join("")}</select></label><div class="settings-actions"><button class="primary-button save-settings-button" data-save-settings>save</button></div></section></dialog>`;
 }
 
 function renderAgentsDialog(state: AppState): string {

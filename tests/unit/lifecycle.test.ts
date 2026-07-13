@@ -33,7 +33,7 @@ describe("request lifecycle", () => {
       notify: vi.fn(),
       transport: {
         async stream(_r, onDelta) {
-          await onDelta("hi");
+          await onDelta({ content: "hi" });
         },
       },
     });
@@ -47,6 +47,82 @@ describe("request lifecycle", () => {
       finalized: true,
     });
   });
+  it("omits tombstoned messages from request payload context", async () => {
+    const session: SessionRecord = {
+      id: "delctx01",
+      title: "s",
+      createdAt: 1,
+      updatedAt: 1,
+      archived: false,
+      rootMessageId: "u1",
+    };
+    await putOne("sessions", session);
+    const chain: MessageRecord[] = [
+      {
+        id: "u1",
+        sessionId: session.id,
+        role: "user",
+        content: "visible user",
+        parentId: null,
+        createdAt: 1,
+        updatedAt: 1,
+        finalized: true,
+      },
+      {
+        id: "a1",
+        sessionId: session.id,
+        role: "assistant",
+        content: "deleted assistant",
+        parentId: "u1",
+        createdAt: 2,
+        updatedAt: 3,
+        finalized: true,
+        deletedAt: 3,
+      },
+      {
+        id: "u2",
+        sessionId: session.id,
+        role: "user",
+        content: "visible descendant",
+        parentId: "a1",
+        createdAt: 4,
+        updatedAt: 4,
+        finalized: true,
+      },
+    ];
+    for (const message of chain) await putOne("messages", message);
+
+    let payloadMessages: Array<{ role: string; content: string }> = [];
+    await startRequest({
+      sessionId: session.id,
+      parentId: "u2",
+      text: "next",
+      notify: vi.fn(),
+      transport: {
+        async stream(request) {
+          payloadMessages = request.payload.messages as Array<{
+            role: string;
+            content: string;
+          }>;
+        },
+      },
+    });
+    await vi.waitFor(async () => expect(requestRegistry.size).toBe(0));
+    await vi.waitFor(async () =>
+      expect(
+        (await getAll<MessageRecord>("messages")).some(
+          (m) => m.role === "assistant" && m.finalized,
+        ),
+      ).toBe(true),
+    );
+
+    expect(payloadMessages.map((m) => m.content)).toEqual([
+      "visible user",
+      "visible descendant",
+      "next",
+    ]);
+  });
+
   it("blocks missing api key outside debug", async () => {
     history.replaceState(null, "", "/");
     await expect(
@@ -68,7 +144,7 @@ describe("request lifecycle", () => {
       notify: vi.fn(),
       transport: {
         async stream(_r, onDelta) {
-          await onDelta("created");
+          await onDelta({ content: "created" });
         },
       },
     });

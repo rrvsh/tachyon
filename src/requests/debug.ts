@@ -27,7 +27,7 @@ export const debugTransport: Transport = {
     for (const token of text.split(/(\s+)/)) {
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
       await sleep(delay, signal);
-      await onDelta(token);
+      await onDelta({ content: token });
     }
   },
 };

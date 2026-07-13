@@ -5,7 +5,7 @@ import {
   type MessageRecord,
   type SessionRecord,
 } from "../data/schema";
-import { pathToMessage, visiblePath } from "./tree";
+import { collectDescendants, pathToMessage, visiblePath } from "./tree";
 
 export function makeSession(title = "Untitled"): SessionRecord {
   const ts = now();
@@ -98,12 +98,57 @@ export function editInPlace(
       id,
       parentId,
       content: old.id === targetId ? newContent : old.content,
+      deletedAt: old.id === targetId ? undefined : old.deletedAt,
+      reasoning: old.id === targetId ? undefined : old.reasoning,
+      reasoningDetails: old.id === targetId ? undefined : old.reasoningDetails,
       createdAt: ts,
       updatedAt: ts,
       finalized: old.role === "user" ? true : old.finalized,
     });
   }
   return { newMessages: copied, selectedId: copied.at(-1)!.id };
+}
+
+export function editWithSubtree(
+  messages: MessageRecord[],
+  currentId: string,
+  targetId: string,
+  newContent: string,
+  cloneFollowing = true,
+): { newMessages: MessageRecord[]; selectedId: string } {
+  const target = messages.find((m) => m.id === targetId);
+  if (!target) throw new Error("Target message was not found.");
+  const visible = visiblePath(messages, currentId, target.sessionId);
+  if (!visible.some((m) => m.id === targetId))
+    throw new Error("Target is not on visible path.");
+
+  const source = cloneFollowing
+    ? [target, ...collectDescendants(messages, target.id, target.sessionId)]
+    : [target];
+  const idMap = new Map<string, string>();
+  const copied = source.map((old, index) => {
+    const id = messageId();
+    idMap.set(old.id, id);
+    const ts = now() + index;
+    return {
+      ...old,
+      id,
+      parentId: old.id === target.id ? old.parentId : idMap.get(old.parentId!)!,
+      content: old.id === target.id ? newContent : old.content,
+      deletedAt: old.id === target.id ? undefined : old.deletedAt,
+      reasoning: old.id === target.id ? undefined : old.reasoning,
+      reasoningDetails: old.id === target.id ? undefined : old.reasoningDetails,
+      createdAt: ts,
+      updatedAt: ts,
+      finalized: old.role === "user" ? true : old.finalized,
+    };
+  });
+  return {
+    newMessages: copied,
+    selectedId: cloneFollowing
+      ? (idMap.get(currentId) ?? copied[0].id)
+      : copied[0].id,
+  };
 }
 
 export function regenerateAssistant(target: MessageRecord): MessageRecord {
