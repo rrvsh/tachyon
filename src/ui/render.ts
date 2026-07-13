@@ -2,6 +2,7 @@ import type { AgentRecord } from "../data/schema";
 import type { AppState } from "../app/state";
 import { siblings } from "../messages/tree";
 import { currentSettings, viewedHasInflight } from "../app/actions";
+import { FONT_OPTIONS } from "../settings/settings";
 
 type ParamField = {
   key: string;
@@ -543,7 +544,11 @@ function renderComposer(state: AppState): string {
 }
 
 function renderSettingsDialog(
-  settings: { apiKey: string; selectedAgentId: string | null },
+  settings: {
+    apiKey: string;
+    selectedAgentId: string | null;
+    fontFamily: string;
+  },
   state: AppState,
 ): string {
   return `<dialog id="settings-dialog" class="modal"><section class="panel"><div class="modal-heading"><h2>settings</h2><button class="icon-button borderless-icon modal-close-button" type="button" data-close-dialog aria-label="Close settings" title="Close settings">×</button></div><label>OpenRouter API key <input data-setting-api-key type="password" value="${esc(settings.apiKey)}" placeholder="sk-or-..."></label><label>agent <select data-setting-agent>${state.agents
@@ -554,7 +559,7 @@ function renderSettingsDialog(
     )
     .join(
       "",
-    )}</select></label><div class="settings-actions"><button class="primary-button save-settings-button" data-save-settings>save</button></div></section></dialog>`;
+    )}</select></label><label>font <select data-setting-font>${FONT_OPTIONS.map((option) => `<option value="${attr(option.value)}" style="font-family: ${attr(option.value)}" ${settings.fontFamily === option.value ? "selected" : ""}>${esc(option.label)}</option>`).join("")}</select></label><div class="settings-actions"><button class="primary-button save-settings-button" data-save-settings>save</button></div></section></dialog>`;
 }
 
 function renderAgentsDialog(state: AppState): string {

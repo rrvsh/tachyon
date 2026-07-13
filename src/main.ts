@@ -3,9 +3,22 @@ import { loadState } from "./app/state";
 import { getAll, putOne } from "./data/db";
 import type { AgentRecord } from "./data/schema";
 import { finalizeStaleUnfinalizedMessages } from "./requests/lifecycle";
-import { getSettings, saveSettings } from "./settings/settings";
+import {
+  applyFontFamily,
+  getSettings,
+  saveSettings,
+} from "./settings/settings";
 import { bindEvents } from "./ui/events";
 import { render } from "./ui/render";
+import "@fontsource/atkinson-hyperlegible/latin-400.css";
+import "@fontsource/atkinson-hyperlegible/latin-700.css";
+import "@fontsource/ibm-plex-mono/latin-400.css";
+import "@fontsource/ibm-plex-mono/latin-700.css";
+import "@fontsource/inter/latin-400.css";
+import "@fontsource/inter/latin-600.css";
+import "@fontsource/inter/latin-700.css";
+import "@fontsource/lora/latin-400.css";
+import "@fontsource/lora/latin-700.css";
 import "./style.css";
 
 async function ensureDefaultAgent(): Promise<void> {
@@ -16,6 +29,7 @@ async function ensureDefaultAgent(): Promise<void> {
   const settings = getSettings();
   if (!settings.selectedAgentId)
     saveSettings({ ...settings, selectedAgentId: agent.id });
+  applyFontFamily(getSettings().fontFamily);
 }
 
 function cssAttr(value: string): string {
@@ -23,6 +37,7 @@ function cssAttr(value: string): string {
 }
 
 async function boot(): Promise<void> {
+  applyFontFamily(getSettings().fontFamily);
   await ensureDefaultAgent();
   await finalizeStaleUnfinalizedMessages();
   const app = document.getElementById("app");

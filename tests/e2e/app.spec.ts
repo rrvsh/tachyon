@@ -166,4 +166,22 @@ test("agent form, edit, and settings are functional", async ({ page }) => {
     .click();
 
   await expect(page.locator("li", { hasText: "Agent Edited" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Close agents" }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(page.getByLabel("font")).toHaveValue(
+    'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+  );
+  await expect(page.getByLabel("font").locator("option")).toHaveCount(7);
+  await page.getByRole("button", { name: "save", exact: true }).click();
+  await page.reload();
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        getComputedStyle(document.documentElement).getPropertyValue(
+          "--app-font-family",
+        ),
+      ),
+    )
+    .toContain("Inter");
 });

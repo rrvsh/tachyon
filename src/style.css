@@ -20,9 +20,17 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family:
-    "IBM Plex Mono", "JetBrains Mono", "Recursive Mono", "Roboto Mono", Menlo,
-    Consolas, ui-monospace, monospace;
+  font-family: var(
+    --app-font-family,
+    "IBM Plex Mono",
+    "JetBrains Mono",
+    "Recursive Mono",
+    "Roboto Mono",
+    Menlo,
+    Consolas,
+    ui-monospace,
+    monospace
+  );
   font-size: 14px;
 }
 

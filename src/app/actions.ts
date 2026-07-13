@@ -6,6 +6,7 @@ import { editInPlace, copyPathToNewSession } from "../messages/operations";
 import { latestDescendant, latestLeaf, pathToMessage } from "../messages/tree";
 import { abortRequest, hasInflight, startRequest } from "../requests/lifecycle";
 import {
+  applyFontFamily,
   getSettings,
   saveSettings,
   setCurrentPointer,
@@ -183,8 +184,10 @@ export async function getAgent(id: string): Promise<AgentRecord | undefined> {
 export function updateSettings(
   apiKey: string,
   selectedAgentId: string | null,
+  fontFamily: string,
 ): void {
-  saveSettings({ apiKey, selectedAgentId });
+  saveSettings({ apiKey, selectedAgentId, fontFamily });
+  applyFontFamily(fontFamily);
 }
 export function currentSettings() {
   return getSettings();

@@ -2,6 +2,7 @@ import {
   abortViewed,
   archiveAgent,
   archiveSession,
+  currentSettings,
   editMessage,
   exportJson,
   forkMessage,
@@ -17,6 +18,7 @@ import {
 } from "../app/actions";
 import { loadState } from "../app/state";
 import { siblings } from "../messages/tree";
+import { applyFontFamily } from "../settings/settings";
 
 export function bindEvents(app: HTMLElement): void {
   app.addEventListener(
@@ -36,6 +38,19 @@ export function bindEvents(app: HTMLElement): void {
       app.dataset.lastUserScrollAt = String(Date.now());
     },
     { capture: true, passive: true },
+  );
+  app.addEventListener(
+    "close",
+    (event) => {
+      const dialog = event.target as HTMLDialogElement;
+      if (
+        dialog.id === "settings-dialog" &&
+        dialog.dataset.settingsSaved !== "true"
+      ) {
+        resetSettingsDialog(dialog);
+      }
+    },
+    true,
   );
   app.addEventListener("click", async (event) => {
     const target = event.target as HTMLElement;
@@ -125,12 +140,19 @@ export function bindEvents(app: HTMLElement): void {
       refresh();
     }
   });
+  app.addEventListener("input", (event) => {
+    previewFontChange(event.target as HTMLElement);
+  });
   app.addEventListener("change", async (event) => {
-    const target = event.target as HTMLInputElement;
-    if (target.matches('[data-action="import"]') && target.files?.[0]) {
-      await importJsonText(await target.files[0].text());
-      refresh();
+    const target = event.target as HTMLElement;
+    if (target.matches('[data-action="import"]')) {
+      const input = target as HTMLInputElement;
+      if (input.files?.[0]) {
+        await importJsonText(await input.files[0].text());
+        refresh();
+      }
     }
+    previewFontChange(target);
   });
   app.addEventListener("click", (event) => {
     const target = event.target as HTMLElement;
@@ -142,15 +164,44 @@ export function bindEvents(app: HTMLElement): void {
       const agent =
         (root.querySelector("[data-setting-agent]") as HTMLSelectElement)
           .value || null;
-      updateSettings(api, agent);
+      const font = (
+        root.querySelector("[data-setting-font]") as HTMLSelectElement
+      ).value;
+      updateSettings(api, agent, font);
+      if (root instanceof HTMLDialogElement)
+        root.dataset.settingsSaved = "true";
       refresh();
     }
   });
 }
 
+function previewFontChange(target: HTMLElement): void {
+  if (!target.matches("[data-setting-font]")) return;
+  const dialog = target.closest<HTMLDialogElement>("#settings-dialog");
+  if (dialog) dialog.dataset.settingsSaved = "false";
+  applyFontFamily((target as HTMLSelectElement).value);
+}
+
+function resetSettingsDialog(dialog: HTMLDialogElement): void {
+  const settings = currentSettings();
+  const api = dialog.querySelector(
+    "[data-setting-api-key]",
+  ) as HTMLInputElement;
+  const agent = dialog.querySelector(
+    "[data-setting-agent]",
+  ) as HTMLSelectElement;
+  const font = dialog.querySelector("[data-setting-font]") as HTMLSelectElement;
+  api.value = settings.apiKey;
+  agent.value = settings.selectedAgentId ?? "";
+  font.value = settings.fontFamily;
+  applyFontFamily(settings.fontFamily);
+}
+
 function openDialog(id: string): void {
   const dialog = document.getElementById(id) as HTMLDialogElement | null;
-  if (dialog && !dialog.open) dialog.showModal();
+  if (!dialog || dialog.open) return;
+  if (id === "settings-dialog") dialog.dataset.settingsSaved = "true";
+  dialog.showModal();
 }
 
 function addExtraParamRow(

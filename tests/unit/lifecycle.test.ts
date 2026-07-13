@@ -5,7 +5,11 @@ import { send } from "../../src/app/actions";
 import { clearDbForTests, getAll, putOne } from "../../src/data/db";
 import type { MessageRecord, SessionRecord } from "../../src/data/schema";
 import { requestRegistry, startRequest } from "../../src/requests/lifecycle";
-import { saveSettings, setCurrentPointer } from "../../src/settings/settings";
+import {
+  DEFAULT_FONT_FAMILY,
+  saveSettings,
+  setCurrentPointer,
+} from "../../src/settings/settings";
 
 describe("request lifecycle", () => {
   beforeEach(async () => {
@@ -14,7 +18,11 @@ describe("request lifecycle", () => {
     await clearDbForTests();
     const a = defaultAgent();
     await putOne("agents", a);
-    saveSettings({ apiKey: "", selectedAgentId: a.id });
+    saveSettings({
+      apiKey: "",
+      selectedAgentId: a.id,
+      fontFamily: DEFAULT_FONT_FAMILY,
+    });
     history.replaceState(null, "", "?debug=1");
   });
   it("creates session, user, assistant and finalizes streamed assistant", async () => {
