@@ -17,6 +17,25 @@ test("debug mode can create and stream a session", async ({ page }) => {
   );
 });
 
+test("left sidebar collapses and persists", async ({ page }) => {
+  await page.goto("/?debug=1&debugDelay=0");
+  await expect(page.getByRole("button", { name: "new chat" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "sessions" })).toBeVisible();
+  await page.getByRole("button", { name: "collapse left sidebar" }).click();
+  await expect(page.getByRole("button", { name: "new chat" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "sessions" })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "expand left sidebar" }),
+  ).toHaveText("|>");
+  await page.reload();
+  await expect(page.getByRole("button", { name: "new chat" })).toHaveCount(0);
+  await page.getByRole("button", { name: "expand left sidebar" }).click();
+  await expect(page.getByRole("button", { name: "new chat" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "collapse left sidebar" }),
+  ).toBeVisible();
+});
+
 test("ctrl enter sends the prompt", async ({ page }) => {
   await page.goto("/?debug=1&debugDelay=0");
   await page

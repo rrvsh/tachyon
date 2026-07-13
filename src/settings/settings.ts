@@ -50,6 +50,7 @@ export function getSettings(): SettingsRecord {
       selectedAgentId: parsed.selectedAgentId ?? null,
       fontFamily: parsed.fontFamily ?? DEFAULT_FONT_FAMILY,
       openThinkingByDefault: parsed.openThinkingByDefault ?? true,
+      leftSidebarCollapsed: parsed.leftSidebarCollapsed ?? false,
     };
   } catch {
     return {
@@ -57,6 +58,7 @@ export function getSettings(): SettingsRecord {
       selectedAgentId: null,
       fontFamily: DEFAULT_FONT_FAMILY,
       openThinkingByDefault: true,
+      leftSidebarCollapsed: false,
     };
   }
 }

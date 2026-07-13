@@ -212,12 +212,14 @@ export function updateSettings(
   selectedAgentId: string | null,
   fontFamily: string,
   openThinkingByDefault: boolean,
+  leftSidebarCollapsed = currentSettings().leftSidebarCollapsed,
 ): void {
   saveSettings({
     apiKey,
     selectedAgentId,
     fontFamily,
     openThinkingByDefault,
+    leftSidebarCollapsed,
   });
   applyFontFamily(fontFamily);
 }

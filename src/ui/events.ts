@@ -222,6 +222,7 @@ export function bindEvents(app: HTMLElement): void {
         settings.selectedAgentId,
         settings.fontFamily,
         (target as HTMLInputElement).checked,
+        settings.leftSidebarCollapsed,
       );
       refresh();
       return;
@@ -237,6 +238,22 @@ export function bindEvents(app: HTMLElement): void {
   });
   app.addEventListener("click", (event) => {
     const target = event.target as HTMLElement;
+    const leftSidebarToggle = target.closest<HTMLElement>(
+      "[data-toggle-left-sidebar]",
+    );
+    if (leftSidebarToggle) {
+      const settings = currentSettings();
+      const collapsed = !settings.leftSidebarCollapsed;
+      updateSettings(
+        settings.apiKey,
+        settings.selectedAgentId,
+        settings.fontFamily,
+        settings.openThinkingByDefault,
+        collapsed,
+      );
+      animateLeftSidebarToggle(app, leftSidebarToggle, collapsed);
+      return;
+    }
     if (target.matches("[data-save-settings]")) {
       const root = target.closest("dialog") ?? app;
       const api = (
@@ -251,12 +268,48 @@ export function bindEvents(app: HTMLElement): void {
         settings.selectedAgentId,
         font,
         settings.openThinkingByDefault,
+        settings.leftSidebarCollapsed,
       );
       if (root instanceof HTMLDialogElement)
         root.dataset.settingsSaved = "true";
       refresh();
     }
   });
+}
+
+function animateLeftSidebarToggle(
+  app: HTMLElement,
+  button: HTMLElement,
+  collapsed: boolean,
+): void {
+  const shell = app.querySelector<HTMLElement>(".app-shell");
+  const sidebar = app.querySelector<HTMLElement>(".left-sidebar");
+  const icon = button.querySelector<HTMLElement>(
+    "[data-left-sidebar-toggle-icon]",
+  );
+  const label = collapsed ? "expand left sidebar" : "collapse left sidebar";
+
+  button.setAttribute("aria-label", label);
+  button.setAttribute("title", label);
+  sidebar?.setAttribute("aria-hidden", String(collapsed));
+  if (!collapsed) sidebar?.removeAttribute("inert");
+
+  icon?.classList.remove("spinning-to-expanded", "spinning-to-collapsed");
+  void icon?.offsetWidth;
+  icon?.classList.add(
+    collapsed ? "spinning-to-collapsed" : "spinning-to-expanded",
+  );
+  shell?.classList.toggle("left-sidebar-collapsed", collapsed);
+  sidebar?.classList.toggle("collapsed", collapsed);
+  icon?.classList.toggle("collapsed", collapsed);
+  app.dataset.leftSidebarCollapsed = String(collapsed);
+
+  window.setTimeout(() => {
+    if (collapsed) sidebar?.setAttribute("inert", "");
+  }, 180);
+  window.setTimeout(() => {
+    icon?.classList.remove("spinning-to-expanded", "spinning-to-collapsed");
+  }, 360);
 }
 
 function preserveVariantScroll(

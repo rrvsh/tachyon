@@ -47,6 +47,7 @@ export interface SettingsRecord {
   selectedAgentId: string | null;
   fontFamily: string;
   openThinkingByDefault: boolean;
+  leftSidebarCollapsed: boolean;
 }
 
 export interface ExportFile {

@@ -398,6 +398,15 @@ export function render(app: HTMLElement, state: AppState): void {
   const settings = currentSettings();
   const previousSessionId = app.dataset.renderSessionId ?? "";
   const nextSessionId = state.sessionId ?? "";
+  const hadPreviousSidebarState = "leftSidebarCollapsed" in app.dataset;
+  const previousLeftSidebarCollapsed =
+    app.dataset.leftSidebarCollapsed === "true";
+  const initialLeftSidebarCollapsed = hadPreviousSidebarState
+    ? previousLeftSidebarCollapsed
+    : settings.leftSidebarCollapsed;
+  const isTogglingLeftSidebar =
+    hadPreviousSidebarState &&
+    previousLeftSidebarCollapsed !== settings.leftSidebarCollapsed;
   const previousConversation = app.querySelector<HTMLElement>(".conversation");
   const previousScrollTop = previousConversation?.scrollTop ?? 0;
   const openDialogId = app.querySelector<HTMLDialogElement>("dialog[open]")?.id;
@@ -422,22 +431,23 @@ export function render(app: HTMLElement, state: AppState): void {
     }),
   );
 
+  const sidebarToggleLabel = settings.leftSidebarCollapsed
+    ? "expand left sidebar"
+    : "collapse left sidebar";
+  const sidebarToggleSpinClass = !isTogglingLeftSidebar
+    ? ""
+    : settings.leftSidebarCollapsed
+      ? "spinning-to-collapsed"
+      : "spinning-to-expanded";
   app.innerHTML = `
-    <div class="app-shell">
-      <aside class="sidebar" aria-label="Sessions">
-        <div class="sidebar-top">
-          <div class="app-mark" aria-label="Tachyon">Tachyon</div>
-          <button class="icon-button primary-button" data-action="new-session" aria-label="New chat" title="New chat">+</button>
-        </div>
-        <nav class="session-nav">
-          <h2>sessions</h2>
-          <ul>${state.sessions.map((s) => `<li class="session-row"><button class="session-link ${state.session?.id === s.id ? "active" : ""}" data-open-session="${s.id}" title="Open chat">${esc(s.title)}</button><button class="icon-button ghost-button" data-archive-session="${s.id}" aria-label="Archive chat" title="Archive chat">×</button></li>`).join("")}</ul>
-          <details class="archive-panel"><summary>archived</summary><ul>${state.archivedSessions.map((s) => `<li class="session-row"><button class="session-link" data-open-session="${s.id}" title="Open archived chat">${esc(s.title)}</button><button class="icon-button ghost-button" data-unarchive-session="${s.id}" aria-label="Restore chat" title="Restore chat">↩</button></li>`).join("")}</ul></details>
-        </nav>
+    <div class="app-shell ${initialLeftSidebarCollapsed ? "left-sidebar-collapsed" : ""}">
+      <aside class="left-sidebar ${initialLeftSidebarCollapsed ? "collapsed" : ""}" aria-label="left sidebar" aria-hidden="${initialLeftSidebarCollapsed}" ${initialLeftSidebarCollapsed ? "inert" : ""}>
+        ${renderLeftSidebar(state)}
       </aside>
 
       <main class="chat-panel">
         <header class="chat-header">
+          <div class="header-left-actions"><button class="icon-button borderless-icon" data-toggle-left-sidebar aria-label="${sidebarToggleLabel}" title="${sidebarToggleLabel}"><span class="left-sidebar-toggle-icon ${initialLeftSidebarCollapsed ? "collapsed" : ""} ${sidebarToggleSpinClass}" data-left-sidebar-toggle-icon>|&gt;</span></button></div>
           <div class="header-actions">
             <button class="icon-button" data-open-dialog="settings-dialog" aria-label="Settings" title="Settings">settings</button>
             <button class="icon-button" data-open-dialog="agents-dialog" aria-label="Agents" title="Agents">agents</button>
@@ -457,7 +467,31 @@ export function render(app: HTMLElement, state: AppState): void {
       ${renderAgentsDialog(state)}
     </div>`;
 
+  const shell = app.querySelector<HTMLElement>(".app-shell");
+  const leftSidebar = app.querySelector<HTMLElement>(".left-sidebar");
+  const leftToggleIcon = app.querySelector<HTMLElement>(
+    "[data-left-sidebar-toggle-icon]",
+  );
+  requestAnimationFrame(() => {
+    shell?.classList.toggle(
+      "left-sidebar-collapsed",
+      settings.leftSidebarCollapsed,
+    );
+    leftSidebar?.classList.toggle("collapsed", settings.leftSidebarCollapsed);
+    leftSidebar?.setAttribute(
+      "aria-hidden",
+      String(settings.leftSidebarCollapsed),
+    );
+    if (settings.leftSidebarCollapsed) leftSidebar?.setAttribute("inert", "");
+    else leftSidebar?.removeAttribute("inert");
+    leftToggleIcon?.classList.toggle(
+      "collapsed",
+      settings.leftSidebarCollapsed,
+    );
+  });
+
   app.dataset.renderSessionId = nextSessionId;
+  app.dataset.leftSidebarCollapsed = String(settings.leftSidebarCollapsed);
   if (sessionChanged || app.dataset.autoscroll === undefined) {
     app.dataset.autoscroll = "true";
   }
@@ -498,6 +532,10 @@ export function render(app: HTMLElement, state: AppState): void {
     ) as HTMLDialogElement | null;
     if (dialog && !dialog.open) dialog.showModal();
   }
+}
+
+function renderLeftSidebar(state: AppState): string {
+  return `<div class="left-sidebar-content"><div class="left-sidebar-top"><div class="app-mark" aria-label="tachyon">tachyon</div><button class="left-text-button" data-action="new-session" aria-label="new chat" title="new chat">new chat</button></div><nav class="left-session-nav"><h2>sessions</h2><ul>${state.sessions.map((s) => `<li class="session-row"><button class="session-link ${state.session?.id === s.id ? "active" : ""}" data-open-session="${s.id}" title="open chat">${esc(s.title)}</button><button class="left-text-button" data-archive-session="${s.id}" aria-label="archive chat" title="archive chat">archive</button></li>`).join("")}</ul><details class="archive-panel"><summary>archived</summary><ul>${state.archivedSessions.map((s) => `<li class="session-row"><button class="session-link" data-open-session="${s.id}" title="open archived chat">${esc(s.title)}</button><button class="left-text-button" data-unarchive-session="${s.id}" aria-label="restore chat" title="restore chat">restore</button></li>`).join("")}</ul></details></nav></div>`;
 }
 
 function bindScrollIntent(app: HTMLElement, conversation: HTMLElement): void {

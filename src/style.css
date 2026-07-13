@@ -85,18 +85,77 @@ button:focus-visible,
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
   min-height: 100vh;
+  transition: grid-template-columns 180ms ease;
 }
 
-.sidebar {
+.app-shell.left-sidebar-collapsed {
+  grid-template-columns: 0 minmax(0, 1fr);
+}
+
+.left-sidebar {
   border-right: 1px solid var(--border);
   background: var(--panel);
   padding: 0.75rem;
   overflow: auto;
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    border-color 180ms ease,
+    opacity 180ms ease,
+    padding 180ms ease,
+    transform 180ms ease;
 }
 
-.sidebar-top,
+.left-sidebar.collapsed {
+  border-right-color: transparent;
+  padding: 0;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateX(-100%);
+}
+
+.left-sidebar-content {
+  visibility: visible;
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease,
+    visibility 0s linear 0s;
+}
+
+.left-sidebar.collapsed .left-sidebar-content {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-0.75rem);
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease,
+    visibility 0s linear 180ms;
+}
+
+.left-sidebar-toggle-icon {
+  display: inline-block;
+  transform: rotate(180deg);
+}
+
+.left-sidebar-toggle-icon.collapsed {
+  transform: rotate(0deg);
+}
+
+.left-sidebar-toggle-icon.spinning-to-expanded {
+  animation: left-sidebar-toggle-spin-expanded 180ms ease 180ms both;
+}
+
+.left-sidebar-toggle-icon.spinning-to-collapsed {
+  animation: left-sidebar-toggle-spin-collapsed 180ms ease 180ms both;
+}
+
+.left-sidebar-top,
 .chat-header,
 .header-actions,
+.header-left-actions,
 .message-meta,
 .message-controls,
 .message-actions,
@@ -106,7 +165,7 @@ button:focus-visible,
   align-items: center;
 }
 
-.sidebar-top,
+.left-sidebar-top,
 .chat-header {
   justify-content: space-between;
   gap: 0.5rem;
@@ -115,7 +174,7 @@ button:focus-visible,
 .app-mark {
   font-weight: 700;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
+  text-transform: lowercase;
 }
 
 .app-mark::before {
@@ -133,7 +192,7 @@ h2 {
   margin: 0;
 }
 
-.session-nav h2,
+.left-session-nav h2,
 .archive-panel summary,
 .eyebrow,
 .muted,
@@ -142,14 +201,14 @@ h2 {
   color: var(--muted);
 }
 
-.session-nav h2,
+.left-session-nav h2,
 .archive-panel summary {
   margin: 1rem 0 0.45rem;
-  text-transform: uppercase;
+  text-transform: lowercase;
   letter-spacing: 0.08em;
 }
 
-.session-nav ul,
+.left-session-nav ul,
 .agent-list,
 .messages {
   list-style: none;
@@ -162,19 +221,32 @@ h2 {
   margin-bottom: 0.3rem;
 }
 
-.session-link {
+.session-link,
+.left-text-button {
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  padding: 0.45rem;
+  border-color: transparent;
+  background: transparent;
+  padding: 0.25rem 0;
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
+  opacity: 0.65;
 }
 
+.left-text-button {
+  flex: 0 0 auto;
+}
+
+.session-link:hover,
+.session-link:focus-visible,
+.left-text-button:hover,
+.left-text-button:focus-visible,
 .session-link.active {
-  border-color: var(--accent);
-  background: var(--panel-strong);
+  border-color: transparent;
+  background: transparent;
+  opacity: 1;
 }
 
 .session-link.active::before {
@@ -191,7 +263,7 @@ h2 {
 }
 
 .chat-header {
-  justify-content: flex-end;
+  justify-content: space-between;
   border-bottom: 1px solid var(--border);
   background: var(--panel);
   padding: 0.55rem 0.75rem;
@@ -700,12 +772,30 @@ select:focus {
   }
 }
 
+@keyframes left-sidebar-toggle-spin-expanded {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(180deg);
+  }
+}
+
+@keyframes left-sidebar-toggle-spin-collapsed {
+  from {
+    transform: rotate(180deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (max-width: 800px) {
   .app-shell {
     display: block;
   }
 
-  .sidebar {
+  .left-sidebar {
     border-right: 0;
     border-bottom: 1px solid var(--border);
   }
