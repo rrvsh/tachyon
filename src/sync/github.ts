@@ -2,6 +2,7 @@ import { analyzeImport, createExport, importFile } from "../data/importExport";
 import { validateExportFile } from "../data/validation";
 import { requestRegistry } from "../requests/lifecycle";
 import {
+  DEFAULT_SYNC_PATH,
   getGithubSyncState,
   isGithubSyncConfigured,
   saveGithubSyncState,
@@ -72,7 +73,7 @@ export async function fetchRemoteFile(
 ): Promise<RemoteFile | null> {
   const { owner, repo } = parseRepository(config.repository);
   const branch = await defaultBranch(config);
-  const path = config.path.trim();
+  const path = config.path.trim() || DEFAULT_SYNC_PATH;
   const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(branch)}`;
   const response = await fetch(url, {
     headers: {
@@ -100,7 +101,7 @@ export async function pushRemoteFile(
 ): Promise<string> {
   const { owner, repo } = parseRepository(config.repository);
   const branch = await defaultBranch(config);
-  const path = config.path.trim();
+  const path = config.path.trim() || DEFAULT_SYNC_PATH;
   const result = await githubFetch<{ content: { sha: string } }>(
     config,
     `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}`,

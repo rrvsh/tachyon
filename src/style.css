@@ -316,11 +316,37 @@ h2 {
   gap: 0.35rem;
 }
 
+.settings-group {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.settings-group p {
+  margin: 0;
+}
+
 .data-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.75rem;
+}
+
+.sync-panel {
+  align-items: end;
+}
+
+.sync-panel p {
+  margin: 0;
+}
+
+.sync-panel .field-help + .field-help {
+  margin-top: 0.15rem;
+}
+
+.data-row-actions {
+  display: grid;
+  justify-items: end;
 }
 
 .import-review {

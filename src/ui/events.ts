@@ -20,7 +20,7 @@ import {
   updateSettings,
   viewedHasInflight,
 } from "../app/actions";
-import { clearNotice, loadState, sessionIdFromUrl } from "../app/state";
+import { clearNotice, loadState, notify, sessionIdFromUrl } from "../app/state";
 import { normalizeMessageForDisplay } from "../messages/display";
 import { siblings } from "../messages/tree";
 import { applyFontFamily } from "../settings/settings";
@@ -107,7 +107,9 @@ export function bindEvents(app: HTMLElement): void {
       return refresh();
     }
     if (target.matches("[data-sync-now]")) {
-      await runGithubFullSync();
+      const state = await runGithubFullSync();
+      if (state.status === "not configured")
+        notify("Configure GitHub repository and token first.", "error");
       return refresh();
     }
     if (target.matches("[data-sync-overwrite]")) {
@@ -355,6 +357,22 @@ export function bindEvents(app: HTMLElement): void {
         root.querySelector("[data-setting-font]") as HTMLSelectElement
       ).value;
       const settings = currentSettings();
+      const syncRepository =
+        (root.querySelector("[data-sync-repository]") as HTMLInputElement)
+          ?.value ?? "";
+      const syncToken =
+        (root.querySelector("[data-sync-token]") as HTMLInputElement)?.value ??
+        "";
+      const autosync =
+        ((root.querySelector("[data-sync-autosync]") as HTMLSelectElement)
+          ?.value as "off" | "30s") ?? "off";
+      if (autosync === "30s" && (!syncRepository.trim() || !syncToken.trim())) {
+        notify(
+          "GitHub repository and token are required for autosync.",
+          "error",
+        );
+        return;
+      }
       updateSettings(
         api,
         settings.selectedAgentId,
@@ -364,25 +382,19 @@ export function bindEvents(app: HTMLElement): void {
         settings.rightSidebarCollapsed,
       );
       updateGithubSyncConfig({
-        repository:
-          (root.querySelector("[data-sync-repository]") as HTMLInputElement)
-            ?.value ?? "",
+        repository: syncRepository,
         branch:
           (root.querySelector("[data-sync-branch]") as HTMLInputElement)
             ?.value ?? "",
         path:
-          (root.querySelector("[data-sync-path]") as HTMLInputElement)?.value ||
-          "tachyon-sync.json",
-        autosync:
-          ((root.querySelector("[data-sync-autosync]") as HTMLSelectElement)
-            ?.value as "off" | "30s") ?? "off",
-        token:
-          (root.querySelector("[data-sync-token]") as HTMLInputElement)
-            ?.value ?? "",
+          (root.querySelector("[data-sync-path]") as HTMLInputElement)?.value ??
+          "",
+        autosync,
+        token: syncToken,
       });
       if (root instanceof HTMLDialogElement)
         root.dataset.settingsSaved = "true";
-      refresh();
+      flashSaved(target);
     }
   });
 }
@@ -474,10 +486,18 @@ async function writeClipboard(text: string): Promise<void> {
 }
 
 function flashCopied(target: HTMLElement): void {
-  const previous = target.textContent ?? "copy";
+  flashButtonText(target, "copied!");
+}
+
+function flashSaved(target: HTMLElement): void {
+  flashButtonText(target, "saved!");
+}
+
+function flashButtonText(target: HTMLElement, text: string): void {
+  const previous = target.textContent ?? "";
   const previousLabel = target.getAttribute("aria-label");
-  target.textContent = "copied!";
-  target.setAttribute("aria-label", "copied!");
+  target.textContent = text;
+  target.setAttribute("aria-label", text);
   window.setTimeout(() => {
     target.textContent = previous;
     if (previousLabel) target.setAttribute("aria-label", previousLabel);

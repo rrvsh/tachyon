@@ -42,7 +42,7 @@ export function defaultGithubSyncState(): GithubSyncState {
     config: {
       repository: "",
       branch: "",
-      path: DEFAULT_SYNC_PATH,
+      path: "",
       token: "",
       autosync: "off",
     },
@@ -102,11 +102,7 @@ export function updateGithubSyncConfig(
 }
 
 export function isGithubSyncConfigured(state = getGithubSyncState()): boolean {
-  return !!(
-    state.config.repository.trim() &&
-    state.config.path.trim() &&
-    state.config.token.trim()
-  );
+  return !!(state.config.repository.trim() && state.config.token.trim());
 }
 
 export function markGithubSyncDirty(): void {
