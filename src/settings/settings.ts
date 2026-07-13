@@ -51,6 +51,7 @@ export function getSettings(): SettingsRecord {
       fontFamily: parsed.fontFamily ?? DEFAULT_FONT_FAMILY,
       openThinkingByDefault: parsed.openThinkingByDefault ?? true,
       leftSidebarCollapsed: parsed.leftSidebarCollapsed ?? false,
+      rightSidebarCollapsed: parsed.rightSidebarCollapsed ?? false,
     };
   } catch {
     return {
@@ -59,6 +60,7 @@ export function getSettings(): SettingsRecord {
       fontFamily: DEFAULT_FONT_FAMILY,
       openThinkingByDefault: true,
       leftSidebarCollapsed: false,
+      rightSidebarCollapsed: false,
     };
   }
 }

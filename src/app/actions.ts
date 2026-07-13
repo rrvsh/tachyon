@@ -234,6 +234,7 @@ export function updateSettings(
   fontFamily: string,
   openThinkingByDefault: boolean,
   leftSidebarCollapsed = currentSettings().leftSidebarCollapsed,
+  rightSidebarCollapsed = currentSettings().rightSidebarCollapsed,
 ): void {
   saveSettings({
     apiKey,
@@ -241,6 +242,7 @@ export function updateSettings(
     fontFamily,
     openThinkingByDefault,
     leftSidebarCollapsed,
+    rightSidebarCollapsed,
   });
   applyFontFamily(fontFamily);
 }

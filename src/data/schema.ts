@@ -48,6 +48,7 @@ export interface SettingsRecord {
   fontFamily: string;
   openThinkingByDefault: boolean;
   leftSidebarCollapsed: boolean;
+  rightSidebarCollapsed: boolean;
 }
 
 export interface ExportFile {

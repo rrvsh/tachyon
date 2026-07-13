@@ -17,23 +17,20 @@ test("debug mode can create and stream a session", async ({ page }) => {
   );
 });
 
-test("left sidebar collapses and persists", async ({ page }) => {
+test("right sidebar sessions collapses and persists", async ({ page }) => {
   await page.goto("/?debug=1&debugDelay=0");
-  await expect(page.getByRole("button", { name: "new chat" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "sessions" })).toBeVisible();
-  await page.getByRole("button", { name: "collapse left sidebar" }).click();
   await expect(page.getByRole("button", { name: "new chat" })).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "sessions" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "sessions" })).toBeVisible();
+  await expect(page.locator(".left-sidebar")).toHaveCount(0);
+  await page.getByRole("button", { name: "collapse right sidebar" }).click();
+  await expect(page.getByRole("button", { name: "sessions" })).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "expand left sidebar" }),
-  ).toHaveText("|>");
+    page.getByRole("button", { name: "expand right sidebar" }),
+  ).toHaveText("<|");
   await page.reload();
-  await expect(page.getByRole("button", { name: "new chat" })).toHaveCount(0);
-  await page.getByRole("button", { name: "expand left sidebar" }).click();
-  await expect(page.getByRole("button", { name: "new chat" })).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "collapse left sidebar" }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "sessions" })).toHaveCount(0);
+  await page.getByRole("button", { name: "expand right sidebar" }).click();
+  await expect(page.getByRole("button", { name: "sessions" })).toBeVisible();
 });
 
 test("ctrl enter sends the prompt", async ({ page }) => {
@@ -116,7 +113,7 @@ test("open thinking default controls only initial thinking state", async ({
   await page.goto(
     "/?debug=1&debugDelay=80&debugReasoning=one%20two%20three%20four&debugText=answer",
   );
-  await page.getByLabel("open thinking by default").uncheck();
+  await page.getByLabel("thinking blocks").selectOption("closed");
   await page
     .getByPlaceholder("Message (empty for assistant-only)")
     .fill("closed thinking");
@@ -280,7 +277,6 @@ test("import and export flow uses canonical JSON records", async ({ page }) => {
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.locator(".message.assistant")).toContainText("exported");
 
-  await page.getByRole("button", { name: "expand right sidebar" }).click();
   await page.getByRole("button", { name: "data" }).click();
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "export data" }).click();
@@ -325,6 +321,7 @@ test("import and export flow uses canonical JSON records", async ({ page }) => {
   await expect(page.locator(".import-review")).toContainText("sessions");
   await page.getByRole("button", { name: "merge" }).click();
   await expect(page.locator(".notices")).toContainText("Imported 2");
+  await page.getByRole("button", { name: "sessions" }).click();
   await expect(
     page.getByRole("button", { name: "Imported E2E Session" }),
   ).toBeVisible();
@@ -356,7 +353,6 @@ test("user scroll intent disables streaming autoscroll", async ({ page }) => {
 
 test("agent form, edit, and settings are functional", async ({ page }) => {
   await page.goto("/?debug=1");
-  await page.getByRole("button", { name: "expand right sidebar" }).click();
   await page.getByRole("button", { name: "agents" }).click();
   await page.getByRole("button", { name: "create new" }).click();
   await page

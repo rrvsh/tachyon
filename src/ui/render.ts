@@ -398,17 +398,11 @@ export function render(app: HTMLElement, state: AppState): void {
   const settings = currentSettings();
   const previousSessionId = app.dataset.renderSessionId ?? "";
   const nextSessionId = state.sessionId ?? "";
-  const hadPreviousSidebarState = "leftSidebarCollapsed" in app.dataset;
-  const previousLeftSidebarCollapsed =
-    app.dataset.leftSidebarCollapsed === "true";
-  const rightSidebarCollapsed = app.dataset.rightSidebarCollapsed !== "false";
-  const rightSidebarTab = app.dataset.rightSidebarTab ?? "settings";
-  const initialLeftSidebarCollapsed = hadPreviousSidebarState
-    ? previousLeftSidebarCollapsed
-    : settings.leftSidebarCollapsed;
-  const isTogglingLeftSidebar =
-    hadPreviousSidebarState &&
-    previousLeftSidebarCollapsed !== settings.leftSidebarCollapsed;
+  const rightSidebarCollapsed =
+    "rightSidebarCollapsed" in app.dataset
+      ? app.dataset.rightSidebarCollapsed !== "false"
+      : settings.rightSidebarCollapsed;
+  const rightSidebarTab = app.dataset.rightSidebarTab ?? "sessions";
   const previousConversation = app.querySelector<HTMLElement>(".conversation");
   const previousScrollTop = previousConversation?.scrollTop ?? 0;
   const openDialogId = app.querySelector<HTMLDialogElement>("dialog[open]")?.id;
@@ -433,24 +427,12 @@ export function render(app: HTMLElement, state: AppState): void {
     }),
   );
 
-  const sidebarToggleLabel = settings.leftSidebarCollapsed
-    ? "expand left sidebar"
-    : "collapse left sidebar";
-  const sidebarToggleSpinClass = !isTogglingLeftSidebar
-    ? ""
-    : settings.leftSidebarCollapsed
-      ? "spinning-to-collapsed"
-      : "spinning-to-expanded";
   app.innerHTML = `
-    <div class="app-shell ${initialLeftSidebarCollapsed ? "left-sidebar-collapsed" : ""} ${rightSidebarCollapsed ? "right-sidebar-collapsed" : ""}">
-      <aside class="left-sidebar ${initialLeftSidebarCollapsed ? "collapsed" : ""}" aria-label="left sidebar" aria-hidden="${initialLeftSidebarCollapsed}" ${initialLeftSidebarCollapsed ? "inert" : ""}>
-        ${renderLeftSidebar(state)}
-      </aside>
-
+    <div class="app-shell ${rightSidebarCollapsed ? "right-sidebar-collapsed" : ""}">
       <main class="chat-panel">
         <header class="chat-header">
-          <div class="header-left-actions"><button class="icon-button borderless-icon" data-toggle-left-sidebar aria-label="${sidebarToggleLabel}" title="${sidebarToggleLabel}"><span class="left-sidebar-toggle-icon ${initialLeftSidebarCollapsed ? "collapsed" : ""} ${sidebarToggleSpinClass}" data-left-sidebar-toggle-icon>|&gt;</span></button></div>
-          <div class="header-actions"><button class="icon-button borderless-icon" data-toggle-right-sidebar aria-label="${rightSidebarCollapsed ? "expand right sidebar" : "collapse right sidebar"}" title="${rightSidebarCollapsed ? "expand right sidebar" : "collapse right sidebar"}">${rightSidebarCollapsed ? "&gt;|" : "|&lt;"}</button></div>
+          <div class="header-left-actions"><div class="app-mark" aria-label="tachyon">tachyon</div></div>
+          <div class="header-actions"><button class="icon-button borderless-icon" data-toggle-right-sidebar aria-label="${rightSidebarCollapsed ? "expand right sidebar" : "collapse right sidebar"}" title="${rightSidebarCollapsed ? "expand right sidebar" : "collapse right sidebar"}"><span class="right-sidebar-toggle-icon ${rightSidebarCollapsed ? "collapsed" : ""}" data-right-sidebar-toggle-icon>&lt;|</span></button></div>
         </header>
         <div class="notices">${state.errors.map((e, index) => `<p class="error" data-dismiss-notice="error:${index}" title="Dismiss">${esc(e)}</p>`).join("")}${state.info.map((e, index) => `<p class="info" data-dismiss-notice="info:${index}" title="Dismiss">${esc(e)}</p>`).join("")}</div>
         <section class="conversation">
@@ -465,31 +447,8 @@ export function render(app: HTMLElement, state: AppState): void {
       </aside>
     </div>`;
 
-  const shell = app.querySelector<HTMLElement>(".app-shell");
-  const leftSidebar = app.querySelector<HTMLElement>(".left-sidebar");
-  const leftToggleIcon = app.querySelector<HTMLElement>(
-    "[data-left-sidebar-toggle-icon]",
-  );
-  requestAnimationFrame(() => {
-    shell?.classList.toggle(
-      "left-sidebar-collapsed",
-      settings.leftSidebarCollapsed,
-    );
-    leftSidebar?.classList.toggle("collapsed", settings.leftSidebarCollapsed);
-    leftSidebar?.setAttribute(
-      "aria-hidden",
-      String(settings.leftSidebarCollapsed),
-    );
-    if (settings.leftSidebarCollapsed) leftSidebar?.setAttribute("inert", "");
-    else leftSidebar?.removeAttribute("inert");
-    leftToggleIcon?.classList.toggle(
-      "collapsed",
-      settings.leftSidebarCollapsed,
-    );
-  });
-
   app.dataset.renderSessionId = nextSessionId;
-  app.dataset.leftSidebarCollapsed = String(settings.leftSidebarCollapsed);
+  app.dataset.rightSidebarCollapsed = String(rightSidebarCollapsed);
   if (sessionChanged || app.dataset.autoscroll === undefined) {
     app.dataset.autoscroll = "true";
   }
@@ -530,10 +489,6 @@ export function render(app: HTMLElement, state: AppState): void {
     ) as HTMLDialogElement | null;
     if (dialog && !dialog.open) dialog.showModal();
   }
-}
-
-function renderLeftSidebar(state: AppState): string {
-  return `<div class="left-sidebar-content"><div class="left-sidebar-top"><div class="app-mark" aria-label="tachyon">tachyon</div><button class="left-text-button" data-action="new-session" aria-label="new chat" title="new chat">new chat</button></div><nav class="left-session-nav"><h2>sessions</h2><ul>${state.sessions.map((s) => `<li class="session-row"><button class="session-link ${state.session?.id === s.id ? "active" : ""}" data-open-session="${s.id}" title="open chat">${esc(s.title)}</button><button class="left-text-button" data-archive-session="${s.id}" aria-label="archive chat" title="archive chat">archive</button></li>`).join("")}</ul><details class="archive-panel"><summary>archived</summary><ul>${state.archivedSessions.map((s) => `<li class="session-row"><button class="session-link" data-open-session="${s.id}" title="open archived chat">${esc(s.title)}</button><button class="left-text-button" data-unarchive-session="${s.id}" aria-label="restore chat" title="restore chat">restore</button></li>`).join("")}</ul></details></nav></div>`;
 }
 
 function bindScrollIntent(app: HTMLElement, conversation: HTMLElement): void {
@@ -586,7 +541,7 @@ function isNearBottom(element: HTMLElement): boolean {
 }
 
 function renderBlankState(): string {
-  return `<div class="blank-state" data-testid="blank"><h2>Tachyon</h2></div>`;
+  return `<div class="blank-state" data-testid="blank"></div>`;
 }
 
 function renderMessages(
@@ -641,8 +596,11 @@ export function renderDisplayContent(
 function renderComposer(state: AppState): string {
   const abort = viewedHasInflight();
   const settings = currentSettings();
+  const newChatButton = state.session
+    ? `<button class="left-text-button" type="button" data-action="new-session" aria-label="new chat" title="new chat">new chat</button>`
+    : "";
   const copyButton = state.visible.some((m) => !m.deletedAt)
-    ? `<button class="icon-button borderless-icon" type="button" data-copy-conversation aria-label="Copy conversation" title="Copy conversation">copy conversation</button>`
+    ? `<button class="left-text-button" type="button" data-copy-conversation aria-label="Copy conversation" title="Copy conversation">copy conversation</button>`
     : "";
   const agentSelect = `<label class="composer-agent-label">agent: <select data-composer-agent aria-label="agent">${state.agents
     .filter((a) => !a.archived)
@@ -651,8 +609,8 @@ function renderComposer(state: AppState): string {
         `<option value="${a.id}" ${settings.selectedAgentId === a.id ? "selected" : ""}>${esc(a.name)}</option>`,
     )
     .join("")}</select></label>`;
-  const thinkingDefault = `<label class="composer-agent-label">open thinking by default <input data-open-thinking-default type="checkbox" ${settings.openThinkingByDefault ? "checked" : ""}></label>`;
-  return `<form class="composer" data-compose><div class="composer-context">${agentSelect}${thinkingDefault}${copyButton}</div><div class="composer-box"><textarea name="message" placeholder="Message (empty for assistant-only)"></textarea><button class="icon-button send-button" type="submit" aria-label="${abort ? "Abort" : "Send"}" title="${abort ? "Abort" : "Send"}">${abort ? "halt" : "send"}</button></div></form>`;
+  const thinkingDefault = `<label class="composer-agent-label">thinking blocks: <select data-open-thinking-default aria-label="thinking blocks"><option value="open" ${settings.openThinkingByDefault ? "selected" : ""}>open</option><option value="closed" ${settings.openThinkingByDefault ? "" : "selected"}>closed</option></select></label>`;
+  return `<form class="composer" data-compose><div class="composer-context"><div class="composer-selects">${agentSelect}${thinkingDefault}</div><div class="composer-actions">${newChatButton}${copyButton}</div></div><div class="composer-box"><textarea name="message" placeholder="Message (empty for assistant-only)"></textarea><button class="icon-button send-button" type="submit" aria-label="${abort ? "Abort" : "Send"}" title="${abort ? "Abort" : "Send"}">${abort ? "halt" : "send"}</button></div></form>`;
 }
 
 function renderRightSidebar(
@@ -665,10 +623,14 @@ function renderRightSidebar(
   app: HTMLElement,
   activeTab: string,
 ): string {
-  const tab = ["settings", "agents", "data"].includes(activeTab)
+  const tab = ["sessions", "agents", "data", "settings"].includes(activeTab)
     ? activeTab
-    : "settings";
-  return `<div class="right-sidebar-content"><div class="right-tabs"><button class="left-text-button right-tab ${tab === "settings" ? "active" : ""}" data-right-tab="settings">settings</button><button class="left-text-button right-tab ${tab === "agents" ? "active" : ""}" data-right-tab="agents">agents</button><button class="left-text-button right-tab ${tab === "data" ? "active" : ""}" data-right-tab="data">data</button></div>${tab === "settings" ? renderSettingsPanel(settings) : tab === "agents" ? renderAgentsPanel(state, app) : renderDataPanel(app)}</div>`;
+    : "sessions";
+  return `<div class="right-sidebar-content"><div class="right-tabs"><button class="left-text-button right-tab ${tab === "sessions" ? "active" : ""}" data-right-tab="sessions">sessions</button><button class="left-text-button right-tab ${tab === "agents" ? "active" : ""}" data-right-tab="agents">agents</button><button class="left-text-button right-tab ${tab === "data" ? "active" : ""}" data-right-tab="data">data</button><button class="left-text-button right-tab ${tab === "settings" ? "active" : ""}" data-right-tab="settings">settings</button></div>${tab === "sessions" ? renderSessionsPanel(state) : tab === "settings" ? renderSettingsPanel(settings) : tab === "agents" ? renderAgentsPanel(state, app) : renderDataPanel(app)}</div>`;
+}
+
+function renderSessionsPanel(state: AppState): string {
+  return `<section class="right-panel"><nav class="left-session-nav"><ul>${state.sessions.map((s) => `<li class="session-row"><button class="session-link ${state.session?.id === s.id ? "active" : ""}" data-open-session="${s.id}" title="open chat">${esc(s.title)}</button><button class="left-text-button" data-archive-session="${s.id}" aria-label="archive chat" title="archive chat">archive</button></li>`).join("")}</ul><details class="archive-panel"><summary>archived</summary><ul>${state.archivedSessions.map((s) => `<li class="session-row"><button class="session-link" data-open-session="${s.id}" title="open archived chat">${esc(s.title)}</button><button class="left-text-button" data-unarchive-session="${s.id}" aria-label="restore chat" title="restore chat">restore</button></li>`).join("")}</ul></details></nav></section>`;
 }
 
 function renderSettingsPanel(settings: {

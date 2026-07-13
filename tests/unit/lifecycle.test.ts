@@ -24,6 +24,7 @@ describe("request lifecycle", () => {
       fontFamily: DEFAULT_FONT_FAMILY,
       openThinkingByDefault: true,
       leftSidebarCollapsed: false,
+      rightSidebarCollapsed: false,
     });
     history.replaceState(null, "", "?debug=1");
   });
