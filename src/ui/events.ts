@@ -20,12 +20,18 @@ import {
   updateSettings,
   viewedHasInflight,
 } from "../app/actions";
-import { clearNotice, loadState } from "../app/state";
+import { clearNotice, loadState, sessionIdFromUrl } from "../app/state";
 import { normalizeMessageForDisplay } from "../messages/display";
 import { siblings } from "../messages/tree";
 import { applyFontFamily } from "../settings/settings";
+import {
+  clearComposerDraft,
+  composerDraftKey,
+  writeComposerDraft,
+} from "./drafts";
 
 export function bindEvents(app: HTMLElement): void {
+  let composerDraftTimer: number | undefined;
   app.addEventListener(
     "wheel",
     (event) => {
@@ -173,9 +179,19 @@ export function bindEvents(app: HTMLElement): void {
     event.preventDefault();
     const form = event.target as HTMLFormElement;
     if (form.matches("[data-compose]")) {
+      const sessionId = sessionIdFromUrl();
       if (viewedHasInflight()) abortViewed();
-      else await send(new FormData(form).get("message")?.toString() ?? "");
-      (form.querySelector("textarea") as HTMLTextAreaElement).value = "";
+      else {
+        const sent = await send(
+          new FormData(form).get("message")?.toString() ?? "",
+        );
+        if (sent) {
+          clearComposerDraft(sessionId);
+          delete app.dataset.composerDraftKey;
+          delete app.dataset.composerDraft;
+          (form.querySelector("textarea") as HTMLTextAreaElement).value = "";
+        }
+      }
       refresh();
     }
     if (form.matches("[data-agent-form]")) {
@@ -216,6 +232,17 @@ export function bindEvents(app: HTMLElement): void {
     const target = event.target as HTMLElement;
     if (target.matches("[data-edit-textarea]")) {
       app.dataset.editingDraft = (target as HTMLTextAreaElement).value;
+    }
+    if (target.matches(".composer textarea")) {
+      const sessionId = sessionIdFromUrl();
+      const draft = (target as HTMLTextAreaElement).value;
+      app.dataset.composerDraftKey = composerDraftKey(sessionId);
+      app.dataset.composerDraft = draft;
+      window.clearTimeout(composerDraftTimer);
+      composerDraftTimer = window.setTimeout(
+        () => writeComposerDraft(sessionId, draft),
+        100,
+      );
     }
     previewFontChange(target);
   });

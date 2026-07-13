@@ -18,7 +18,7 @@ import {
 } from "../settings/settings";
 import { notify, sessionIdFromUrl } from "./state";
 
-export async function send(text: string): Promise<void> {
+export async function send(text: string): Promise<boolean> {
   try {
     await startRequest({
       sessionId: sessionIdFromUrl(),
@@ -26,8 +26,10 @@ export async function send(text: string): Promise<void> {
       text,
       notify,
     });
+    return true;
   } catch (error) {
     notify(error instanceof Error ? error.message : String(error), "error");
+    return false;
   }
 }
 

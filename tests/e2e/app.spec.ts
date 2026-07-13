@@ -55,6 +55,22 @@ test("clicking errors fades and dismisses them", async ({ page }) => {
   await expect(page.locator(".notices .error")).toHaveCount(0);
 });
 
+test("composer draft survives unrelated request finalization", async ({
+  page,
+}) => {
+  await page.goto("/?debug=1&debugDelay=300&debugText=finished");
+  await page
+    .getByPlaceholder("Message (empty for assistant-only)")
+    .fill("start request");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByRole("button", { name: "new chat" })).toBeVisible();
+  await page.getByRole("button", { name: "new chat" }).click();
+  const composer = page.getByPlaceholder("Message (empty for assistant-only)");
+  await composer.fill("draft survives");
+  await page.waitForTimeout(450);
+  await expect(composer).toHaveValue("draft survives");
+});
+
 test("ctrl enter halts an inflight prompt", async ({ page }) => {
   await page.goto(
     "/?debug=1&debugDelay=100&debugText=one%20two%20three%20four%20five",
