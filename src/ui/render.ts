@@ -401,6 +401,8 @@ export function render(app: HTMLElement, state: AppState): void {
   const hadPreviousSidebarState = "leftSidebarCollapsed" in app.dataset;
   const previousLeftSidebarCollapsed =
     app.dataset.leftSidebarCollapsed === "true";
+  const rightSidebarCollapsed = app.dataset.rightSidebarCollapsed !== "false";
+  const rightSidebarTab = app.dataset.rightSidebarTab ?? "settings";
   const initialLeftSidebarCollapsed = hadPreviousSidebarState
     ? previousLeftSidebarCollapsed
     : settings.leftSidebarCollapsed;
@@ -440,7 +442,7 @@ export function render(app: HTMLElement, state: AppState): void {
       ? "spinning-to-collapsed"
       : "spinning-to-expanded";
   app.innerHTML = `
-    <div class="app-shell ${initialLeftSidebarCollapsed ? "left-sidebar-collapsed" : ""}">
+    <div class="app-shell ${initialLeftSidebarCollapsed ? "left-sidebar-collapsed" : ""} ${rightSidebarCollapsed ? "right-sidebar-collapsed" : ""}">
       <aside class="left-sidebar ${initialLeftSidebarCollapsed ? "collapsed" : ""}" aria-label="left sidebar" aria-hidden="${initialLeftSidebarCollapsed}" ${initialLeftSidebarCollapsed ? "inert" : ""}>
         ${renderLeftSidebar(state)}
       </aside>
@@ -448,12 +450,7 @@ export function render(app: HTMLElement, state: AppState): void {
       <main class="chat-panel">
         <header class="chat-header">
           <div class="header-left-actions"><button class="icon-button borderless-icon" data-toggle-left-sidebar aria-label="${sidebarToggleLabel}" title="${sidebarToggleLabel}"><span class="left-sidebar-toggle-icon ${initialLeftSidebarCollapsed ? "collapsed" : ""} ${sidebarToggleSpinClass}" data-left-sidebar-toggle-icon>|&gt;</span></button></div>
-          <div class="header-actions">
-            <button class="icon-button" data-open-dialog="settings-dialog" aria-label="Settings" title="Settings">settings</button>
-            <button class="icon-button" data-open-dialog="agents-dialog" aria-label="Agents" title="Agents">agents</button>
-            <button class="icon-button" data-action="export" aria-label="Export" title="Export">export</button>
-            <label class="icon-button import-button" aria-label="Import" title="Import">import<input data-action="import" type="file" accept="application/json"></label>
-          </div>
+          <div class="header-actions"><button class="icon-button borderless-icon" data-toggle-right-sidebar aria-label="${rightSidebarCollapsed ? "expand right sidebar" : "collapse right sidebar"}" title="${rightSidebarCollapsed ? "expand right sidebar" : "collapse right sidebar"}">${rightSidebarCollapsed ? "&gt;|" : "|&lt;"}</button></div>
         </header>
         <div class="notices">${state.errors.map((e, index) => `<p class="error" data-dismiss-notice="error:${index}" title="Dismiss">${esc(e)}</p>`).join("")}${state.info.map((e, index) => `<p class="info" data-dismiss-notice="info:${index}" title="Dismiss">${esc(e)}</p>`).join("")}</div>
         <section class="conversation">
@@ -463,8 +460,9 @@ export function render(app: HTMLElement, state: AppState): void {
         ${renderComposer(state)}
       </main>
 
-      ${renderSettingsDialog(settings, state)}
-      ${renderAgentsDialog(state)}
+      <aside class="right-sidebar ${rightSidebarCollapsed ? "collapsed" : ""}" aria-label="right sidebar" aria-hidden="${rightSidebarCollapsed}" ${rightSidebarCollapsed ? "inert" : ""}>
+        ${renderRightSidebar(settings, state, app, rightSidebarTab)}
+      </aside>
     </div>`;
 
   const shell = app.querySelector<HTMLElement>(".app-shell");
@@ -657,40 +655,177 @@ function renderComposer(state: AppState): string {
   return `<form class="composer" data-compose><div class="composer-context">${agentSelect}${thinkingDefault}${copyButton}</div><div class="composer-box"><textarea name="message" placeholder="Message (empty for assistant-only)"></textarea><button class="icon-button send-button" type="submit" aria-label="${abort ? "Abort" : "Send"}" title="${abort ? "Abort" : "Send"}">${abort ? "halt" : "send"}</button></div></form>`;
 }
 
-function renderSettingsDialog(
+function renderRightSidebar(
   settings: {
     apiKey: string;
     selectedAgentId: string | null;
     fontFamily: string;
   },
   state: AppState,
+  app: HTMLElement,
+  activeTab: string,
 ): string {
-  return `<dialog id="settings-dialog" class="modal"><section class="panel"><div class="modal-heading"><h2>settings</h2><button class="icon-button borderless-icon modal-close-button" type="button" data-close-dialog aria-label="Close settings" title="Close settings">×</button></div><label>OpenRouter API key <input data-setting-api-key type="password" value="${esc(settings.apiKey)}" placeholder="sk-or-..."></label><label>font <select data-setting-font>${FONT_OPTIONS.map((option) => `<option value="${attr(option.value)}" style="font-family: ${attr(option.value)}" ${settings.fontFamily === option.value ? "selected" : ""}>${esc(option.label)}</option>`).join("")}</select></label><div class="settings-actions"><button class="primary-button save-settings-button" data-save-settings>save</button></div></section></dialog>`;
+  const tab = ["settings", "agents", "data"].includes(activeTab)
+    ? activeTab
+    : "settings";
+  return `<div class="right-sidebar-content"><div class="right-tabs"><button class="left-text-button right-tab ${tab === "settings" ? "active" : ""}" data-right-tab="settings">settings</button><button class="left-text-button right-tab ${tab === "agents" ? "active" : ""}" data-right-tab="agents">agents</button><button class="left-text-button right-tab ${tab === "data" ? "active" : ""}" data-right-tab="data">data</button></div>${tab === "settings" ? renderSettingsPanel(settings) : tab === "agents" ? renderAgentsPanel(state, app) : renderDataPanel(app)}</div>`;
 }
 
-function renderAgentsDialog(state: AppState): string {
-  return `<dialog id="agents-dialog" class="modal wide-modal"><section class="panel"><div class="modal-heading"><h2>agents</h2><button class="icon-button borderless-icon modal-close-button" type="button" data-close-dialog aria-label="Close agents" title="Close agents">×</button></div><form class="agent-form" data-agent-form><input type="hidden" name="id"><label>name<input name="name" placeholder="concise assistant"></label><label>model slug<input name="model" placeholder="openai/gpt-4o-mini"></label><label>system prompt<textarea name="systemPrompt" placeholder="You are concise and practical."></textarea></label>${renderParamFields()}<button class="primary-button save-agent-button" aria-label="Save agent" title="Save agent">save agent</button></form><ul class="agent-list">${state.agents.map((a) => renderAgentRow(a)).join("")}</ul></section></dialog>`;
+function renderSettingsPanel(settings: {
+  apiKey: string;
+  selectedAgentId: string | null;
+  fontFamily: string;
+}): string {
+  return `<section class="right-panel"><label>openrouter api key <input data-setting-api-key type="password" value="${esc(settings.apiKey)}" placeholder="sk-or-..."></label><label>font <select data-setting-font>${FONT_OPTIONS.map((option) => `<option value="${attr(option.value)}" style="font-family: ${attr(option.value)}" ${settings.fontFamily === option.value ? "selected" : ""}>${esc(option.label)}</option>`).join("")}</select></label><div class="settings-actions"><button class="left-text-button save-settings-button" data-save-settings>save</button></div></section>`;
 }
 
-function renderParamFields(): string {
-  return `<fieldset class="params-grid"><legend><a href="https://openrouter.ai/docs/api/reference/parameters" target="_blank" rel="noreferrer">params</a></legend>${paramSections
+function renderDataPanel(app: HTMLElement): string {
+  const review = parseImportReview(app);
+  const summary =
+    review?.valid && review.summary ? renderImportSummary(review) : "";
+  const error =
+    review && !review.valid
+      ? `<div class="import-review"><p><strong>cannot import this file</strong></p><p class="error">${esc(review.error ?? "Invalid export file.")}</p></div>`
+      : "";
+  const actions = review?.valid
+    ? `<section class="data-row"><p class="field-help">Merge adds/updates safe records and skips conflicts.</p><button class="left-text-button" data-import-merge>merge</button></section><section class="data-row"><p class="field-help">Replace deletes local records missing from backup, then loads this backup.</p><button class="left-text-button" data-import-replace>replace</button></section>`
+    : "";
+  return `<section class="right-panel"><section class="data-row"><p class="field-help">Download a backup of all chats and agents.</p><button class="left-text-button" data-action="export">export data</button></section><section class="data-row"><p class="field-help">Upload a Tachyon backup.</p><label class="left-text-button import-button">choose file<input data-action="import" type="file" accept="application/json"></label></section>${error}${summary}${actions}</section>`;
+}
+
+function parseImportReview(app: HTMLElement): {
+  valid: boolean;
+  error?: string;
+  exportedAt?: number;
+  summary?: Record<
+    string,
+    {
+      added: number;
+      changed: number;
+      unchanged: number;
+      removedOnReplace: number;
+      quarantined: number;
+    }
+  >;
+  quarantineReasons?: string[];
+} | null {
+  if (!app.dataset.importReview) return null;
+  try {
+    return JSON.parse(app.dataset.importReview) as {
+      valid: boolean;
+      error?: string;
+      exportedAt?: number;
+      summary?: Record<
+        string,
+        {
+          added: number;
+          changed: number;
+          unchanged: number;
+          removedOnReplace: number;
+          quarantined: number;
+        }
+      >;
+      quarantineReasons?: string[];
+    };
+  } catch {
+    return null;
+  }
+}
+
+function renderImportSummary(review: {
+  summary?: Record<
+    string,
+    {
+      added: number;
+      changed: number;
+      unchanged: number;
+      removedOnReplace: number;
+      quarantined: number;
+    }
+  >;
+  quarantineReasons?: string[];
+  exportedAt?: number;
+}): string {
+  const rows = ["sessions", "messages", "agents"]
+    .map((key) => {
+      const bucket = review.summary?.[key];
+      if (!bucket) return "";
+      return `<tr><th scope="row">${esc(key)}</th><td>${bucket.added}</td><td>${bucket.changed}</td><td>${bucket.removedOnReplace}</td><td>${bucket.quarantined}</td></tr>`;
+    })
+    .join("");
+  const reasons = review.quarantineReasons?.length
+    ? `<details class="archive-panel" open><summary>quarantine</summary><ul>${review.quarantineReasons.map((reason) => `<li>${esc(reason)}</li>`).join("")}</ul></details>`
+    : "";
+  const exportedAt = review.exportedAt
+    ? `<p class="import-exported-at">file exported at: ${esc(new Date(review.exportedAt).toLocaleString())}</p>`
+    : "";
+  return `<div class="import-review"><p><strong>import preview</strong></p>${exportedAt}<table class="import-diff-table"><thead><tr><th></th><th>add</th><th>update</th><th>delete on replace*</th><th>conflicts</th></tr></thead><tbody>${rows}</tbody></table><div class="field-help import-definitions"><p>add: new records from backup.</p><p>update: existing records changed by backup.</p><p>delete on replace*: local records missing from backup; deleted only by replace.</p><p>conflicts: unsafe/conflicting records; skipped silently on merge.</p></div>${reasons}</div>`;
+}
+
+function renderAgentsPanel(state: AppState, app: HTMLElement): string {
+  const activeAgents = state.agents.filter((a) => !a.archived);
+  const archivedAgents = state.agents.filter((a) => a.archived);
+  return `<section class="right-panel"><ul class="agent-list sidebar-agent-list">${activeAgents.map((a) => renderAgentRow(a)).join("")}</ul><details class="archive-panel"><summary>archived</summary><ul class="agent-list sidebar-agent-list">${archivedAgents.map((a) => renderAgentRow(a)).join("")}</ul></details><button class="left-text-button full-width-text-button" data-agent-create>create new</button>${renderAgentForm(state, app)}</section>`;
+}
+
+function renderAgentForm(state: AppState, app: HTMLElement): string {
+  const mode = app.dataset.agentFormMode;
+  if (!mode) return "";
+  const agent =
+    mode === "edit"
+      ? state.agents.find((a) => a.id === app.dataset.agentFormId)
+      : undefined;
+  const status = agent ? `editing: ${esc(agent.name)}` : "creating new agent";
+  return `<div class="agent-fields-section"><p class="agent-form-status">${status}</p><form class="agent-form" data-agent-form><input type="hidden" name="id" value="${attr(agent?.id ?? "")}"><label>name<input name="name" value="${attr(agent?.name ?? "")}" placeholder="concise assistant"></label><label>model slug<input name="model" value="${attr(agent?.model ?? "")}" placeholder="openai/gpt-4o-mini"></label><label>system prompt<textarea name="systemPrompt" placeholder="You are concise and practical.">${esc(agent?.systemPrompt ?? "")}</textarea></label>${renderParamFields(agent?.params)}<div class="settings-actions"><button class="left-text-button save-agent-button" aria-label="Save agent" title="Save agent">save</button><button type="button" class="left-text-button" data-agent-form-cancel>cancel</button></div></form></div>`;
+}
+
+function readPath(source: Record<string, unknown>, path: string): unknown {
+  return path.split(".").reduce<unknown>((current, part) => {
+    if (typeof current !== "object" || current === null) return undefined;
+    return (current as Record<string, unknown>)[part];
+  }, source);
+}
+
+function stringifyParam(value: unknown): string {
+  if (value === undefined) return "";
+  return typeof value === "string" ? value : JSON.stringify(value);
+}
+
+function renderParamFields(params: Record<string, unknown> = {}): string {
+  const commonKeys = new Set(
+    paramSections.flatMap((section) =>
+      section.fields.map((field) => field.key.split(".")[0]),
+    ),
+  );
+  const extraRows = Object.entries(params)
+    .filter(([key]) => !commonKeys.has(key))
+    .map(
+      ([key, value]) =>
+        `<div class="extra-param-row"><input name="extraParamKey" placeholder="key" value="${attr(key)}"><input name="extraParamValue" placeholder="value or JSON" value="${attr(stringifyParam(value))}"><button class="icon-button" type="button" aria-label="Remove field" title="Remove field">×</button></div>`,
+    )
+    .join("");
+  return `<details class="params-grid"><summary><a href="https://openrouter.ai/docs/api/reference/parameters" target="_blank" rel="noreferrer">params</a></summary>${paramSections
     .map(
       (section) =>
-        `<fieldset class="param-section"><legend>${esc(section.title)}</legend>${section.fields.map((field) => renderParamField(field)).join("")}</fieldset>`,
+        `<details class="param-section"><summary>${esc(section.title)}</summary><div class="param-section-body">${section.fields.map((field) => renderParamField(field, params)).join("")}</div></details>`,
     )
     .join(
       "",
-    )}<fieldset class="extra-config"><legend>extra config</legend><p class="field-help">Add provider-specific or advanced OpenRouter request parameters not listed above.</p><div class="extra-param-list" data-extra-param-list></div><button type="button" class="secondary-button" data-add-param>+ field</button></fieldset></fieldset>`;
+    )}<details class="extra-config"><summary>extra config</summary><div class="param-section-body"><p class="field-help">Add provider-specific or advanced OpenRouter request parameters not listed above.</p><div class="extra-param-list" data-extra-param-list>${extraRows}</div><button type="button" class="secondary-button" data-add-param>+ field</button></div></details></details>`;
 }
 
-function renderParamField(field: ParamField): string {
+function renderParamField(
+  field: ParamField,
+  params: Record<string, unknown>,
+): string {
+  const value = stringifyParam(readPath(params, field.key));
   const control = field.options
-    ? `<select data-param-path="${field.key}" name="param:${field.key}">${field.options.map((option) => `<option value="${attr(option.value)}">${esc(option.label)}</option>`).join("")}</select>`
-    : `<input data-param-path="${field.key}" name="param:${field.key}" type="${field.type ?? "text"}" step="any" placeholder="${attr(field.placeholder)}">`;
+    ? `<select data-param-path="${field.key}" name="param:${field.key}">${field.options.map((option) => `<option value="${attr(option.value)}" ${value === option.value ? "selected" : ""}>${esc(option.label)}</option>`).join("")}</select>`
+    : `<input data-param-path="${field.key}" name="param:${field.key}" type="${field.type ?? "text"}" step="any" placeholder="${attr(field.placeholder)}" value="${attr(value)}">`;
   return `<label>${field.label}${control}<span class="field-help">${esc(field.description)}</span></label>`;
 }
 
 function renderAgentRow(agent: AgentRecord): string {
   const params = esc(JSON.stringify(agent.params));
-  return `<li data-agent-id="${agent.id}" data-agent-name="${attr(agent.name)}" data-agent-model="${attr(agent.model)}" data-agent-system-prompt="${attr(agent.systemPrompt)}" data-agent-params="${params}"><div><strong>${esc(agent.name)}</strong><code>${esc(agent.model)}</code>${agent.archived ? '<span class="muted"> archived</span>' : ""}</div><div><button class="icon-button" data-agent-edit="${agent.id}" aria-label="Edit agent" title="Edit agent">✎</button><button class="icon-button" data-agent-archive="${agent.id}" aria-label="${agent.archived ? "Restore agent" : "Archive agent"}" title="${agent.archived ? "Restore agent" : "Archive agent"}">${agent.archived ? "↩" : "×"}</button></div></li>`;
+  return `<li data-agent-id="${agent.id}" data-agent-name="${attr(agent.name)}" data-agent-model="${attr(agent.model)}" data-agent-system-prompt="${attr(agent.systemPrompt)}" data-agent-params="${params}"><div><strong>${esc(agent.name)}</strong><code>${esc(agent.model)}</code></div><div><button class="left-text-button" data-agent-edit="${agent.id}" aria-label="Edit agent" title="Edit agent">edit</button><button class="left-text-button" data-agent-duplicate="${agent.id}" aria-label="Duplicate agent" title="Duplicate agent">duplicate</button><button class="left-text-button" data-agent-archive="${agent.id}" aria-label="${agent.archived ? "Restore agent" : "Archive agent"}" title="${agent.archived ? "Restore agent" : "Archive agent"}">${agent.archived ? "restore" : "archive"}</button></div></li>`;
 }

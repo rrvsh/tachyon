@@ -1,9 +1,11 @@
 import {
   abortViewed,
+  analyzeImportJsonText,
   archiveAgent,
   archiveSession,
   currentSettings,
   deleteMessage,
+  duplicateAgent,
   editMessage,
   exportJson,
   forkMessage,
@@ -11,6 +13,7 @@ import {
   newSession,
   openSession,
   regenerate,
+  replaceJsonText,
   saveAgent,
   selectBranch,
   send,
@@ -41,29 +44,8 @@ export function bindEvents(app: HTMLElement): void {
     },
     { capture: true, passive: true },
   );
-  app.addEventListener(
-    "close",
-    (event) => {
-      const dialog = event.target as HTMLDialogElement;
-      if (
-        dialog.id === "settings-dialog" &&
-        dialog.dataset.settingsSaved !== "true"
-      ) {
-        resetSettingsDialog(dialog);
-      }
-    },
-    true,
-  );
   app.addEventListener("click", async (event) => {
     const target = event.target as HTMLElement;
-    if (target.matches("dialog.modal")) {
-      (target as HTMLDialogElement).close();
-      return;
-    }
-    if (target.matches("[data-close-dialog]")) {
-      target.closest("dialog")?.close();
-      return;
-    }
     const dismiss = target.getAttribute("data-dismiss-notice");
     if (dismiss) {
       const [kind, index] = dismiss.split(":");
@@ -73,8 +55,11 @@ export function bindEvents(app: HTMLElement): void {
       }
       return;
     }
-    const dialogId = target.getAttribute("data-open-dialog");
-    if (dialogId) return openDialog(dialogId);
+    const rightTab = target.getAttribute("data-right-tab");
+    if (rightTab) {
+      app.dataset.rightSidebarTab = rightTab;
+      return refresh();
+    }
     if (target.matches("[data-add-param]")) return addExtraParamRow(app);
     const open = target.getAttribute("data-open-session");
     if (open) return openSession(open);
@@ -90,10 +75,38 @@ export function bindEvents(app: HTMLElement): void {
         agentArchive,
         target.getAttribute("aria-label") !== "Restore agent",
       ).then(refresh);
+    const agentDuplicate = target.getAttribute("data-agent-duplicate");
+    if (agentDuplicate)
+      return void duplicateAgent(agentDuplicate).then(refresh);
     const agentEdit = target.getAttribute("data-agent-edit");
     if (agentEdit) {
-      populateAgentForm(target);
-      return openDialog("agents-dialog");
+      app.dataset.agentFormMode = "edit";
+      app.dataset.agentFormId = agentEdit;
+      return refresh();
+    }
+    if (target.matches("[data-agent-create]")) {
+      app.dataset.agentFormMode = "create";
+      delete app.dataset.agentFormId;
+      return refresh();
+    }
+    if (target.matches("[data-agent-form-cancel]")) {
+      delete app.dataset.agentFormMode;
+      delete app.dataset.agentFormId;
+      return refresh();
+    }
+    if (target.matches("[data-import-merge]")) {
+      const text = app.dataset.importReviewText;
+      if (text) await importJsonText(text);
+      delete app.dataset.importReview;
+      delete app.dataset.importReviewText;
+      return refresh();
+    }
+    if (target.matches("[data-import-replace]")) {
+      const text = app.dataset.importReviewText;
+      if (text) await replaceJsonText(text);
+      delete app.dataset.importReview;
+      delete app.dataset.importReviewText;
+      return refresh();
     }
     if (target.matches("[data-copy-conversation]"))
       return void copyConversationText(target);
@@ -167,13 +180,17 @@ export function bindEvents(app: HTMLElement): void {
     }
     if (form.matches("[data-agent-form]")) {
       const fd = new FormData(form);
-      await saveAgent({
+      const saved = await saveAgent({
         id: String(fd.get("id") || "") || undefined,
         name: String(fd.get("name") ?? ""),
         model: String(fd.get("model") ?? ""),
         systemPrompt: String(fd.get("systemPrompt") ?? ""),
         params: collectParams(form),
       });
+      if (saved) {
+        delete app.dataset.agentFormMode;
+        delete app.dataset.agentFormId;
+      }
       refresh();
     }
   });
@@ -230,7 +247,13 @@ export function bindEvents(app: HTMLElement): void {
     if (target.matches('[data-action="import"]')) {
       const input = target as HTMLInputElement;
       if (input.files?.[0]) {
-        await importJsonText(await input.files[0].text());
+        const text = await input.files[0].text();
+        const review = await analyzeImportJsonText(text);
+        const { file: _file, ...reviewSummary } = review;
+        void _file;
+        app.dataset.importReviewText = text;
+        app.dataset.importReview = JSON.stringify(reviewSummary);
+        app.dataset.rightSidebarTab = "data";
         refresh();
       }
     }
@@ -254,6 +277,14 @@ export function bindEvents(app: HTMLElement): void {
       animateLeftSidebarToggle(app, leftSidebarToggle, collapsed);
       return;
     }
+    const rightSidebarToggle = target.closest<HTMLElement>(
+      "[data-toggle-right-sidebar]",
+    );
+    if (rightSidebarToggle) {
+      const collapsed = !(app.dataset.rightSidebarCollapsed !== "false");
+      animateRightSidebarToggle(app, rightSidebarToggle, collapsed);
+      return;
+    }
     if (target.matches("[data-save-settings]")) {
       const root = target.closest("dialog") ?? app;
       const api = (
@@ -275,6 +306,29 @@ export function bindEvents(app: HTMLElement): void {
       refresh();
     }
   });
+}
+
+function animateRightSidebarToggle(
+  app: HTMLElement,
+  button: HTMLElement,
+  collapsed: boolean,
+): void {
+  const shell = app.querySelector<HTMLElement>(".app-shell");
+  const sidebar = app.querySelector<HTMLElement>(".right-sidebar");
+  const label = collapsed ? "expand right sidebar" : "collapse right sidebar";
+
+  button.setAttribute("aria-label", label);
+  button.setAttribute("title", label);
+  button.textContent = collapsed ? ">|" : "|<";
+  sidebar?.setAttribute("aria-hidden", String(collapsed));
+  if (!collapsed) sidebar?.removeAttribute("inert");
+  shell?.classList.toggle("right-sidebar-collapsed", collapsed);
+  sidebar?.classList.toggle("collapsed", collapsed);
+  app.dataset.rightSidebarCollapsed = String(collapsed);
+
+  window.setTimeout(() => {
+    if (collapsed) sidebar?.setAttribute("inert", "");
+  }, 180);
 }
 
 function animateLeftSidebarToggle(

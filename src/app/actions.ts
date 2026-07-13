@@ -1,5 +1,10 @@
-import { makeAgent } from "../agents/agents";
-import { createExport, importFile } from "../data/importExport";
+import { assertValidAgentConfig, makeAgent } from "../agents/agents";
+import {
+  analyzeImport,
+  createExport,
+  importFile,
+  replaceImport,
+} from "../data/importExport";
 import { getMessagesBySession, getOne, putOne, transactPut } from "../data/db";
 import type { AgentRecord, MessageRecord, SessionRecord } from "../data/schema";
 import { copyPathToNewSession, editWithSubtree } from "../messages/operations";
@@ -169,7 +174,7 @@ export async function saveAgent(form: {
   systemPrompt: string;
   params: string | Record<string, unknown>;
   archived?: boolean;
-}): Promise<void> {
+}): Promise<boolean> {
   try {
     const params =
       typeof form.params === "string"
@@ -180,20 +185,21 @@ export async function saveAgent(form: {
     const existing = form.id
       ? await getOne<AgentRecord>("agents", form.id)
       : undefined;
-    await putOne(
-      "agents",
-      makeAgent({
-        ...existing,
-        id: form.id ?? existing?.id,
-        name: form.name,
-        model: form.model,
-        systemPrompt: form.systemPrompt,
-        params,
-        archived: form.archived ?? existing?.archived ?? false,
-      }),
-    );
+    const agent = makeAgent({
+      ...existing,
+      id: form.id ?? existing?.id,
+      name: form.name,
+      model: form.model,
+      systemPrompt: form.systemPrompt,
+      params,
+      archived: form.archived ?? existing?.archived ?? false,
+    });
+    assertValidAgentConfig(agent);
+    await putOne("agents", agent);
+    return true;
   } catch (error) {
     notify(error instanceof Error ? error.message : String(error), "error");
+    return false;
   }
 }
 
@@ -203,6 +209,21 @@ export async function archiveAgent(
 ): Promise<void> {
   const a = await getOne<AgentRecord>("agents", id);
   if (a) await putOne("agents", { ...a, archived, updatedAt: Date.now() });
+}
+
+export async function duplicateAgent(id: string): Promise<void> {
+  const a = await getOne<AgentRecord>("agents", id);
+  if (!a) return;
+  await putOne(
+    "agents",
+    makeAgent({
+      name: `${a.name} copy`,
+      model: a.model,
+      systemPrompt: a.systemPrompt,
+      params: a.params,
+      archived: false,
+    }),
+  );
 }
 export async function getAgent(id: string): Promise<AgentRecord | undefined> {
   return getOne<AgentRecord>("agents", id);
@@ -237,7 +258,24 @@ export async function exportJson(): Promise<void> {
   a.click();
   URL.revokeObjectURL(a.href);
 }
+export async function analyzeImportJsonText(text: string) {
+  try {
+    return await analyzeImport(JSON.parse(text));
+  } catch (error) {
+    return {
+      valid: false,
+      error: error instanceof Error ? error.message : String(error),
+      quarantineReasons: [],
+    };
+  }
+}
+
 export async function importJsonText(text: string): Promise<void> {
   const result = await importFile(JSON.parse(text));
   notify(`Imported ${result.imported}, quarantined ${result.quarantined}.`);
+}
+
+export async function replaceJsonText(text: string): Promise<void> {
+  const result = await replaceImport(JSON.parse(text));
+  notify(`Replaced local data with ${result.imported} imported records.`);
 }

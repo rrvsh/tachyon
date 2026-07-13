@@ -86,6 +86,38 @@ export async function getMessagesBySession(
   return req<MessageRecord[]>(index.getAll(IDBKeyRange.only(sessionId)));
 }
 
+export async function replaceData(records: {
+  sessions: SessionRecord[];
+  messages: MessageRecord[];
+  agents: AgentRecord[];
+  quarantine?: QuarantineRecord[];
+}): Promise<void> {
+  const tx = await store("readwrite", [
+    "sessions",
+    "messages",
+    "agents",
+    "quarantine",
+  ]);
+  for (const name of [
+    "sessions",
+    "messages",
+    "agents",
+    "quarantine",
+  ] as Store[])
+    tx.objectStore(name).clear();
+  for (const session of records.sessions)
+    tx.objectStore("sessions").put(session);
+  for (const message of records.messages)
+    tx.objectStore("messages").put(message);
+  for (const agent of records.agents) tx.objectStore("agents").put(agent);
+  for (const q of records.quarantine ?? []) tx.objectStore("quarantine").put(q);
+  await new Promise<void>((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}
+
 export async function transactPut(records: {
   sessions?: SessionRecord[];
   messages?: MessageRecord[];

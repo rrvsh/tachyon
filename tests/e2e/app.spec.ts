@@ -280,8 +280,10 @@ test("import and export flow uses canonical JSON records", async ({ page }) => {
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.locator(".message.assistant")).toContainText("exported");
 
+  await page.getByRole("button", { name: "expand right sidebar" }).click();
+  await page.getByRole("button", { name: "data" }).click();
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Export", exact: true }).click();
+  await page.getByRole("button", { name: "export data" }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toContain("tachyon-export");
 
@@ -319,6 +321,9 @@ test("import and export flow uses canonical JSON records", async ({ page }) => {
     mimeType: "application/json",
     buffer: Buffer.from(JSON.stringify(imported)),
   });
+  await expect(page.locator(".import-review")).toContainText("import preview");
+  await expect(page.locator(".import-review")).toContainText("sessions");
+  await page.getByRole("button", { name: "merge" }).click();
   await expect(page.locator(".notices")).toContainText("Imported 2");
   await expect(
     page.getByRole("button", { name: "Imported E2E Session" }),
@@ -351,7 +356,9 @@ test("user scroll intent disables streaming autoscroll", async ({ page }) => {
 
 test("agent form, edit, and settings are functional", async ({ page }) => {
   await page.goto("/?debug=1");
-  await page.getByRole("button", { name: "Agents", exact: true }).click();
+  await page.getByRole("button", { name: "expand right sidebar" }).click();
+  await page.getByRole("button", { name: "agents" }).click();
+  await page.getByRole("button", { name: "create new" }).click();
   await page
     .locator('form[data-agent-form] input[name="name"]')
     .fill("Agent E2E");
@@ -382,8 +389,7 @@ test("agent form, edit, and settings are functional", async ({ page }) => {
 
   await expect(page.locator("li", { hasText: "Agent Edited" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Close agents" }).click();
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "settings" }).click();
   await expect(page.getByLabel("font")).toHaveValue(
     'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
   );
