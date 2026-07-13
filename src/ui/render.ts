@@ -403,7 +403,7 @@ export function render(app: HTMLElement, state: AppState): void {
   const rightSidebarCollapsed =
     "rightSidebarCollapsed" in app.dataset
       ? app.dataset.rightSidebarCollapsed !== "false"
-      : settings.rightSidebarCollapsed;
+      : defaultRightSidebarCollapsed(settings.rightSidebarCollapsed);
   const rightSidebarTab = app.dataset.rightSidebarTab ?? "sessions";
   const previousConversation = app.querySelector<HTMLElement>(".conversation");
   const previousScrollTop = previousConversation?.scrollTop ?? 0;
@@ -444,6 +444,7 @@ export function render(app: HTMLElement, state: AppState): void {
         ${renderComposer(state, app)}
       </main>
 
+      <button class="mobile-sidebar-backdrop" type="button" data-toggle-right-sidebar aria-label="close sidebar" ${rightSidebarCollapsed ? "hidden" : ""}></button>
       <aside class="right-sidebar ${rightSidebarCollapsed ? "collapsed" : ""}" aria-label="right sidebar" aria-hidden="${rightSidebarCollapsed}" ${rightSidebarCollapsed ? "inert" : ""}>
         ${renderRightSidebar(settings, state, app, rightSidebarTab)}
       </aside>
@@ -493,6 +494,10 @@ export function render(app: HTMLElement, state: AppState): void {
   }
 }
 
+function defaultRightSidebarCollapsed(savedCollapsed: boolean): boolean {
+  return window.matchMedia("(max-width: 800px)").matches || savedCollapsed;
+}
+
 function bindScrollIntent(app: HTMLElement, conversation: HTMLElement): void {
   let pointerScroll = false;
   const detach = () => {
@@ -518,6 +523,16 @@ function bindScrollIntent(app: HTMLElement, conversation: HTMLElement): void {
     pointerScroll = false;
     if (isNearBottom(conversation)) app.dataset.autoscroll = "true";
   });
+  conversation.addEventListener("pointercancel", () => {
+    pointerScroll = false;
+  });
+  conversation.addEventListener(
+    "touchmove",
+    () => {
+      detach();
+    },
+    { passive: true },
+  );
   conversation.addEventListener("scroll", () => {
     if (isNearBottom(conversation) && !hasRecentUserScroll(app)) {
       app.dataset.autoscroll = "true";
@@ -617,7 +632,7 @@ function renderComposer(state: AppState, app: HTMLElement): string {
     )
     .join("")}</select></label>`;
   const thinkingDefault = `<label class="composer-agent-label">thinking blocks: <select data-open-thinking-default aria-label="thinking blocks"><option value="open" ${settings.openThinkingByDefault ? "selected" : ""}>open</option><option value="closed" ${settings.openThinkingByDefault ? "" : "selected"}>closed</option></select></label>`;
-  return `<form class="composer" data-compose><div class="composer-context"><div class="composer-selects">${agentSelect}${thinkingDefault}</div><div class="composer-actions">${newChatButton}${copyButton}</div></div><div class="composer-box"><textarea name="message" placeholder="Message (empty for assistant-only)">${esc(draft)}</textarea><button class="icon-button send-button" type="submit" aria-label="${abort ? "Abort" : "Send"}" title="${abort ? "Abort" : "Send"}">${abort ? "halt" : "send"}</button></div></form>`;
+  return `<form class="composer" data-compose><div class="composer-context"><div class="composer-selects">${agentSelect}${thinkingDefault}</div><div class="composer-actions">${newChatButton}${copyButton}</div></div><div class="composer-box"><textarea name="message" rows="1" enterkeyhint="send" placeholder="Message (empty for assistant-only)">${esc(draft)}</textarea><button class="icon-button send-button" type="submit" aria-label="${abort ? "Abort" : "Send"}" title="${abort ? "Abort" : "Send"}">${abort ? "halt" : "send"}</button></div></form>`;
 }
 
 function renderRightSidebar(
@@ -633,7 +648,7 @@ function renderRightSidebar(
   const tab = ["sessions", "agents", "data", "settings"].includes(activeTab)
     ? activeTab
     : "sessions";
-  return `<div class="right-sidebar-content"><div class="right-tabs"><button class="left-text-button right-tab ${tab === "sessions" ? "active" : ""}" data-right-tab="sessions">sessions</button><button class="left-text-button right-tab ${tab === "agents" ? "active" : ""}" data-right-tab="agents">agents</button><button class="left-text-button right-tab ${tab === "data" ? "active" : ""}" data-right-tab="data">data</button><button class="left-text-button right-tab ${tab === "settings" ? "active" : ""}" data-right-tab="settings">settings</button></div>${tab === "sessions" ? renderSessionsPanel(state) : tab === "settings" ? renderSettingsPanel(settings) : tab === "agents" ? renderAgentsPanel(state, app) : renderDataPanel(app)}</div>`;
+  return `<div class="right-sidebar-content"><div class="mobile-sidebar-header"><span class="app-mark">menu</span><button class="icon-button borderless-icon" type="button" data-toggle-right-sidebar aria-label="close sidebar" title="close sidebar">close</button></div><div class="right-tabs"><button class="left-text-button right-tab ${tab === "sessions" ? "active" : ""}" data-right-tab="sessions">sessions</button><button class="left-text-button right-tab ${tab === "agents" ? "active" : ""}" data-right-tab="agents">agents</button><button class="left-text-button right-tab ${tab === "data" ? "active" : ""}" data-right-tab="data">data</button><button class="left-text-button right-tab ${tab === "settings" ? "active" : ""}" data-right-tab="settings">settings</button></div>${tab === "sessions" ? renderSessionsPanel(state) : tab === "settings" ? renderSettingsPanel(settings) : tab === "agents" ? renderAgentsPanel(state, app) : renderDataPanel(app)}</div>`;
 }
 
 function renderSessionsPanel(state: AppState): string {

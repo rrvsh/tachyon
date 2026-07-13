@@ -21,7 +21,6 @@ test("right sidebar sessions collapses and persists", async ({ page }) => {
   await page.goto("/?debug=1&debugDelay=0");
   await expect(page.getByRole("button", { name: "new chat" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "sessions" })).toBeVisible();
-  await expect(page.locator(".left-sidebar")).toHaveCount(0);
   await page.getByRole("button", { name: "collapse right sidebar" }).click();
   await expect(page.getByRole("button", { name: "sessions" })).toHaveCount(0);
   await expect(

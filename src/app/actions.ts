@@ -235,7 +235,6 @@ export function updateSettings(
   selectedAgentId: string | null,
   fontFamily: string,
   openThinkingByDefault: boolean,
-  leftSidebarCollapsed = currentSettings().leftSidebarCollapsed,
   rightSidebarCollapsed = currentSettings().rightSidebarCollapsed,
 ): void {
   saveSettings({
@@ -243,7 +242,6 @@ export function updateSettings(
     selectedAgentId,
     fontFamily,
     openThinkingByDefault,
-    leftSidebarCollapsed,
     rightSidebarCollapsed,
   });
   applyFontFamily(fontFamily);

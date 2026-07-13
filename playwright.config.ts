@@ -16,8 +16,30 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
+      testIgnore: /mobile\.spec\.ts/,
       use: {
         ...devices["Desktop Chrome"],
+        launchOptions: existsSync(chromiumPath)
+          ? { executablePath: chromiumPath }
+          : undefined,
+      },
+    },
+    {
+      name: "mobile-chrome",
+      testMatch: /mobile\.spec\.ts/,
+      use: {
+        ...devices["Pixel 7"],
+        launchOptions: existsSync(chromiumPath)
+          ? { executablePath: chromiumPath }
+          : undefined,
+      },
+    },
+    {
+      name: "mobile-iphone",
+      testMatch: /mobile\.spec\.ts/,
+      use: {
+        ...devices["iPhone 14"],
+        browserName: "chromium",
         launchOptions: existsSync(chromiumPath)
           ? { executablePath: chromiumPath }
           : undefined,

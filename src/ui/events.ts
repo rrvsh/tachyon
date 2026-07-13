@@ -48,14 +48,6 @@ export function bindEvents(app: HTMLElement): void {
     },
     { capture: true, passive: true },
   );
-  app.addEventListener(
-    "touchmove",
-    () => {
-      app.dataset.autoscroll = "false";
-      app.dataset.lastUserScrollAt = String(Date.now());
-    },
-    { capture: true, passive: true },
-  );
   app.addEventListener("click", async (event) => {
     const target = event.target as HTMLElement;
     const dismiss = target.getAttribute("data-dismiss-notice");
@@ -295,7 +287,6 @@ export function bindEvents(app: HTMLElement): void {
         (target as HTMLSelectElement).value || null,
         settings.fontFamily,
         settings.openThinkingByDefault,
-        settings.leftSidebarCollapsed,
         settings.rightSidebarCollapsed,
       );
       refresh();
@@ -308,7 +299,6 @@ export function bindEvents(app: HTMLElement): void {
         settings.selectedAgentId,
         settings.fontFamily,
         (target as HTMLSelectElement).value === "open",
-        settings.leftSidebarCollapsed,
         settings.rightSidebarCollapsed,
       );
       refresh();
@@ -342,7 +332,6 @@ export function bindEvents(app: HTMLElement): void {
         settings.selectedAgentId,
         settings.fontFamily,
         settings.openThinkingByDefault,
-        settings.leftSidebarCollapsed,
         collapsed,
       );
       animateRightSidebarToggle(app, rightSidebarToggle, collapsed);
@@ -378,7 +367,6 @@ export function bindEvents(app: HTMLElement): void {
         settings.selectedAgentId,
         font,
         settings.openThinkingByDefault,
-        settings.leftSidebarCollapsed,
         settings.rightSidebarCollapsed,
       );
       updateGithubSyncConfig({
@@ -406,7 +394,8 @@ function animateRightSidebarToggle(
 ): void {
   const shell = app.querySelector<HTMLElement>(".app-shell");
   const sidebar = app.querySelector<HTMLElement>(".right-sidebar");
-  const icon = button.querySelector<HTMLElement>(
+  const backdrop = app.querySelector<HTMLElement>(".mobile-sidebar-backdrop");
+  const icon = app.querySelector<HTMLElement>(
     "[data-right-sidebar-toggle-icon]",
   );
   const label = collapsed ? "expand right sidebar" : "collapse right sidebar";
@@ -415,13 +404,19 @@ function animateRightSidebarToggle(
   button.setAttribute("title", label);
   icon?.classList.toggle("collapsed", collapsed);
   sidebar?.setAttribute("aria-hidden", String(collapsed));
-  if (!collapsed) sidebar?.removeAttribute("inert");
+  if (!collapsed) {
+    sidebar?.removeAttribute("inert");
+    backdrop?.removeAttribute("hidden");
+  }
   shell?.classList.toggle("right-sidebar-collapsed", collapsed);
   sidebar?.classList.toggle("collapsed", collapsed);
   app.dataset.rightSidebarCollapsed = String(collapsed);
 
   window.setTimeout(() => {
-    if (collapsed) sidebar?.setAttribute("inert", "");
+    if (collapsed) {
+      sidebar?.setAttribute("inert", "");
+      backdrop?.setAttribute("hidden", "");
+    }
   }, 180);
 }
 
