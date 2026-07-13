@@ -366,6 +366,51 @@ test("user scroll intent disables streaming autoscroll", async ({ page }) => {
   ).resolves.toBe("false");
 });
 
+test("composer stays pinned when the right sidebar content grows", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto("/?debug=1");
+  await page.getByRole("button", { name: "agents" }).click();
+  await page.getByRole("button", { name: "create new" }).click();
+  await page.locator(".params-grid > summary").click();
+  await page.locator(".right-sidebar").evaluate((sidebar) => {
+    sidebar
+      .querySelectorAll<HTMLDetailsElement>("details")
+      .forEach((details) => {
+        details.open = true;
+      });
+  });
+
+  await expect(page.getByRole("button", { name: "Send" })).toBeVisible();
+  await expect
+    .poll(() =>
+      page.locator(".composer").evaluate((el) => {
+        const rect = el.getBoundingClientRect();
+        const chat = document
+          .querySelector(".chat-panel")!
+          .getBoundingClientRect();
+        return {
+          bottom: Math.round(rect.bottom),
+          viewport: window.innerHeight,
+          width: Math.round(rect.width),
+          chatWidth: Math.round(chat.width),
+          x: Math.round(rect.x),
+          documentFitsViewport:
+            document.documentElement.scrollHeight <= window.innerHeight,
+        };
+      }),
+    )
+    .toEqual({
+      bottom: 720,
+      viewport: 720,
+      width: 820,
+      chatWidth: 820,
+      x: 0,
+      documentFitsViewport: true,
+    });
+});
+
 test("agent form, edit, and settings are functional", async ({ page }) => {
   await page.goto("/?debug=1");
   await page.getByRole("button", { name: "agents" }).click();

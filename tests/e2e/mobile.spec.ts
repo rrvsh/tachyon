@@ -87,6 +87,27 @@ test("mobile touch scrolling disables streaming autoscroll only from conversatio
     .toBe("false");
 });
 
+test("mobile keyboard inset lifts composer above the occluded area", async ({
+  page,
+}) => {
+  await page.goto("/?debug=1&debugDelay=0");
+  const bottomBefore = await page
+    .locator(".composer")
+    .evaluate((el) => Math.round(el.getBoundingClientRect().bottom));
+
+  await page.evaluate(() => {
+    document.documentElement.style.setProperty("--keyboard-inset", "180px");
+  });
+
+  await expect
+    .poll(() =>
+      page
+        .locator(".composer")
+        .evaluate((el) => Math.round(el.getBoundingClientRect().bottom)),
+    )
+    .toBe(bottomBefore - 180);
+});
+
 test("mobile message controls are reachable and tap-sized", async ({
   page,
 }) => {

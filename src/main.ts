@@ -11,6 +11,7 @@ import {
 } from "./settings/settings";
 import { maybeRunPendingGithubSync, startGithubAutosync } from "./sync/github";
 import { bindEvents } from "./ui/events";
+import { bindKeyboardInset } from "./ui/keyboardInset";
 import { render } from "./ui/render";
 import "@fontsource/atkinson-hyperlegible/latin-400.css";
 import "@fontsource/atkinson-hyperlegible/latin-700.css";
@@ -83,6 +84,7 @@ async function boot(): Promise<void> {
   const app = document.getElementById("app");
   if (!app) throw new Error("Missing app root");
   bindEvents(app);
+  bindKeyboardInset();
   const rerender = async () => render(app, await loadState());
   window.addEventListener("app:changed", () => {
     void maybeRunPendingGithubSync().then(rerender);
