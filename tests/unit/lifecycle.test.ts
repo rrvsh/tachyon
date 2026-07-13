@@ -22,6 +22,7 @@ describe("request lifecycle", () => {
       apiKey: "",
       selectedAgentId: a.id,
       fontFamily: DEFAULT_FONT_FAMILY,
+      openThinkingByDefault: true,
     });
     history.replaceState(null, "", "?debug=1");
   });

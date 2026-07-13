@@ -426,7 +426,8 @@ pre {
 
 .composer-context .icon-button,
 .composer-agent-label,
-.composer-agent-label select {
+.composer-agent-label select,
+.composer-agent-label input {
   opacity: 0.65;
 }
 
@@ -450,6 +451,11 @@ pre {
   color: var(--text);
   cursor: pointer;
   padding: 0;
+}
+
+.composer-agent-label input {
+  width: auto;
+  cursor: pointer;
 }
 
 .composer {

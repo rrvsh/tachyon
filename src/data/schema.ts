@@ -46,6 +46,7 @@ export interface SettingsRecord {
   apiKey: string;
   selectedAgentId: string | null;
   fontFamily: string;
+  openThinkingByDefault: boolean;
 }
 
 export interface ExportFile {

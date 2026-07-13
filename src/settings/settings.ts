@@ -49,12 +49,14 @@ export function getSettings(): SettingsRecord {
       apiKey: parsed.apiKey ?? "",
       selectedAgentId: parsed.selectedAgentId ?? null,
       fontFamily: parsed.fontFamily ?? DEFAULT_FONT_FAMILY,
+      openThinkingByDefault: parsed.openThinkingByDefault ?? true,
     };
   } catch {
     return {
       apiKey: "",
       selectedAgentId: null,
       fontFamily: DEFAULT_FONT_FAMILY,
+      openThinkingByDefault: true,
     };
   }
 }

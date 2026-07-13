@@ -73,6 +73,69 @@ test("abort finalizes only the viewed debug request", async ({ page }) => {
   ).toBeVisible();
 });
 
+test("reasoning streams into the thinking block before content", async ({
+  page,
+}) => {
+  await page.goto(
+    "/?debug=1&debugDelay=60&debugReasoning=thinking%20live&debugText=answer",
+  );
+  await page
+    .getByPlaceholder("Message (empty for assistant-only)")
+    .fill("reason first");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.locator(".thinking-block")).toContainText("thinking");
+  const assistantContent = page.locator(
+    ".message.assistant [data-message-content]",
+  );
+  await expect(assistantContent).not.toContainText("answer");
+  await expect(assistantContent).toContainText("answer");
+});
+
+test("open thinking default controls only initial thinking state", async ({
+  page,
+}) => {
+  await page.goto(
+    "/?debug=1&debugDelay=80&debugReasoning=one%20two%20three%20four&debugText=answer",
+  );
+  await page.getByLabel("open thinking by default").uncheck();
+  await page
+    .getByPlaceholder("Message (empty for assistant-only)")
+    .fill("closed thinking");
+  await page.getByRole("button", { name: "Send" }).click();
+  const block = page.locator(".thinking-block");
+  await expect(block).toContainText("one");
+  await expect(block).not.toHaveAttribute("open", "");
+  await block.locator("summary").click();
+  await expect(block).toHaveAttribute("open", "");
+  await expect(block).toContainText("three");
+  await expect(block).toHaveAttribute("open", "");
+  await expect(
+    page.getByRole("button", { name: "Send", exact: true }),
+  ).toBeVisible();
+  await expect(block).toHaveAttribute("open", "");
+});
+
+test("thinking block can stay closed while streaming", async ({ page }) => {
+  await page.goto(
+    "/?debug=1&debugDelay=80&debugReasoning=one%20two%20three%20four&debugText=answer",
+  );
+  await page
+    .getByPlaceholder("Message (empty for assistant-only)")
+    .fill("close thinking");
+  await page.getByRole("button", { name: "Send" }).click();
+  const block = page.locator(".thinking-block");
+  await expect(block).toContainText("one");
+  await expect(block).toHaveAttribute("open", "");
+  await block.locator("summary").click();
+  await expect(block).not.toHaveAttribute("open", "");
+  await expect(block).toContainText("three");
+  await expect(block).not.toHaveAttribute("open", "");
+  await expect(
+    page.getByRole("button", { name: "Send", exact: true }),
+  ).toBeVisible();
+  await expect(block).not.toHaveAttribute("open", "");
+});
+
 test("streaming assistant messages hide controls until finalized", async ({
   page,
 }) => {

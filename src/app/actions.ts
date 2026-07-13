@@ -211,8 +211,14 @@ export function updateSettings(
   apiKey: string,
   selectedAgentId: string | null,
   fontFamily: string,
+  openThinkingByDefault: boolean,
 ): void {
-  saveSettings({ apiKey, selectedAgentId, fontFamily });
+  saveSettings({
+    apiKey,
+    selectedAgentId,
+    fontFamily,
+    openThinkingByDefault,
+  });
   applyFontFamily(fontFamily);
 }
 export function currentSettings() {

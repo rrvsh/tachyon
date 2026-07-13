@@ -410,6 +410,17 @@ export function render(app: HTMLElement, state: AppState): void {
     (!previousConversation ||
       sessionChanged ||
       app.dataset.autoscroll !== "false");
+  const thinkingOpenByMessage = new Map(
+    Array.from(
+      app.querySelectorAll<HTMLElement>("[data-message-body]"),
+    ).flatMap((body) => {
+      const id = body.dataset.messageBody;
+      const block = body.querySelector<HTMLDetailsElement>(
+        "[data-thinking-block]",
+      );
+      return id && block ? [[id, block.open] as const] : [];
+    }),
+  );
 
   app.innerHTML = `
     <div class="app-shell">
@@ -436,7 +447,7 @@ export function render(app: HTMLElement, state: AppState): void {
         </header>
         <div class="notices">${state.errors.map((e, index) => `<p class="error" data-dismiss-notice="error:${index}" title="Dismiss">${esc(e)}</p>`).join("")}${state.info.map((e, index) => `<p class="info" data-dismiss-notice="info:${index}" title="Dismiss">${esc(e)}</p>`).join("")}</div>
         <section class="conversation">
-          ${state.session ? renderMessages(state, app) : renderBlankState()}
+          ${state.session ? renderMessages(state, app, thinkingOpenByMessage) : renderBlankState()}
           <div class="scroll-anchor" data-scroll-anchor></div>
         </section>
         ${renderComposer(state)}
@@ -542,7 +553,11 @@ function renderBlankState(): string {
   return `<div class="blank-state" data-testid="blank"><h2>Tachyon</h2></div>`;
 }
 
-function renderMessages(state: AppState, app: HTMLElement): string {
+function renderMessages(
+  state: AppState,
+  app: HTMLElement,
+  thinkingOpenByMessage: Map<string, boolean>,
+): string {
   const editingId = app.dataset.editingMessageId ?? "";
   const editingDraft = app.dataset.editingDraft;
   return `<ol class="messages">${state.visible
@@ -568,7 +583,7 @@ function renderMessages(state: AppState, app: HTMLElement): string {
         ? `<div class="deleted-message">deleted message</div>`
         : isEditing
           ? `<textarea class="message-edit-textarea" data-edit-textarea="${m.id}" style="height: ${Number(app.dataset.editingHeight ?? 0) || 128}px" aria-label="Edit message">${esc(editingDraft ?? m.content)}</textarea>`
-          : `${display.thinkingText ? `<details class="thinking-block" ${isStreamingAssistant ? "open" : ""}><summary>thinking</summary><pre>${esc(display.thinkingText)}</pre></details>` : ""}<pre data-message-content="${m.id}">${esc(display.visibleContent)}</pre>`;
+          : `<div class="message-body" data-message-body="${m.id}">${renderDisplayContent(display.thinkingText, display.visibleContent, thinkingOpenByMessage.get(m.id) ?? currentSettings().openThinkingByDefault)}</div>`;
       const controls = m.deletedAt
         ? `<div class="message-actions"><button class="icon-button borderless-icon restore-button" data-restore="${m.id}" aria-label="Restore deleted message" title="Restore deleted message">restore deleted message</button></div>`
         : isEditing
@@ -577,6 +592,14 @@ function renderMessages(state: AppState, app: HTMLElement): string {
       return `<li data-message-id="${m.id}" class="message ${m.role}${m.deletedAt ? " deleted" : ""}"><div class="message-card"><div class="message-meta"><strong>${m.role === "assistant" ? "assistant" : "user"}</strong></div>${content}${isStreamingAssistant ? "" : `<div class="message-controls">${branchControls}${controls}</div>`}</div></li>`;
     })
     .join("")}</ol>`;
+}
+
+export function renderDisplayContent(
+  thinkingText: string,
+  visibleContent: string,
+  openThinking = false,
+): string {
+  return `${thinkingText ? `<details class="thinking-block" data-thinking-block ${openThinking ? "open" : ""}><summary>thinking</summary><pre data-thinking-content>${esc(thinkingText)}</pre></details>` : ""}<pre data-message-content>${esc(visibleContent)}</pre>`;
 }
 
 function renderComposer(state: AppState): string {
@@ -592,7 +615,8 @@ function renderComposer(state: AppState): string {
         `<option value="${a.id}" ${settings.selectedAgentId === a.id ? "selected" : ""}>${esc(a.name)}</option>`,
     )
     .join("")}</select></label>`;
-  return `<form class="composer" data-compose><div class="composer-context">${agentSelect}${copyButton}</div><div class="composer-box"><textarea name="message" placeholder="Message (empty for assistant-only)"></textarea><button class="icon-button send-button" type="submit" aria-label="${abort ? "Abort" : "Send"}" title="${abort ? "Abort" : "Send"}">${abort ? "halt" : "send"}</button></div></form>`;
+  const thinkingDefault = `<label class="composer-agent-label">open thinking by default <input data-open-thinking-default type="checkbox" ${settings.openThinkingByDefault ? "checked" : ""}></label>`;
+  return `<form class="composer" data-compose><div class="composer-context">${agentSelect}${thinkingDefault}${copyButton}</div><div class="composer-box"><textarea name="message" placeholder="Message (empty for assistant-only)"></textarea><button class="icon-button send-button" type="submit" aria-label="${abort ? "Abort" : "Send"}" title="${abort ? "Abort" : "Send"}">${abort ? "halt" : "send"}</button></div></form>`;
 }
 
 function renderSettingsDialog(

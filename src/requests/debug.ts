@@ -24,6 +24,16 @@ export const debugTransport: Transport = {
     );
     if (new URLSearchParams(location.search).get("debugError") === "1")
       throw new Error("Simulated debug transport error.");
+    const reasoning = new URLSearchParams(location.search).get(
+      "debugReasoning",
+    );
+    if (reasoning) {
+      for (const token of reasoning.split(/(\s+)/)) {
+        if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+        await sleep(delay, signal);
+        await onDelta({ reasoning: token });
+      }
+    }
     for (const token of text.split(/(\s+)/)) {
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
       await sleep(delay, signal);

@@ -210,6 +210,18 @@ export function bindEvents(app: HTMLElement): void {
         settings.apiKey,
         (target as HTMLSelectElement).value || null,
         settings.fontFamily,
+        settings.openThinkingByDefault,
+      );
+      refresh();
+      return;
+    }
+    if (target.matches("[data-open-thinking-default]")) {
+      const settings = currentSettings();
+      updateSettings(
+        settings.apiKey,
+        settings.selectedAgentId,
+        settings.fontFamily,
+        (target as HTMLInputElement).checked,
       );
       refresh();
       return;
@@ -233,7 +245,13 @@ export function bindEvents(app: HTMLElement): void {
       const font = (
         root.querySelector("[data-setting-font]") as HTMLSelectElement
       ).value;
-      updateSettings(api, currentSettings().selectedAgentId, font);
+      const settings = currentSettings();
+      updateSettings(
+        api,
+        settings.selectedAgentId,
+        font,
+        settings.openThinkingByDefault,
+      );
       if (root instanceof HTMLDialogElement)
         root.dataset.settingsSaved = "true";
       refresh();

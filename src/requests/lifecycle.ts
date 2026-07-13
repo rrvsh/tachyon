@@ -171,7 +171,12 @@ export async function startRequest(input: {
           await putOne("messages", updated);
           window.dispatchEvent(
             new CustomEvent("app:stream-updated", {
-              detail: { messageId: assistant.id, content: updated.content },
+              detail: {
+                messageId: assistant.id,
+                content: updated.content,
+                reasoning: updated.reasoning,
+                reasoningDetails: updated.reasoningDetails,
+              },
             }),
           );
         },

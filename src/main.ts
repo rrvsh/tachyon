@@ -1,7 +1,8 @@
 import { defaultAgent } from "./agents/agents";
 import { loadState } from "./app/state";
 import { getAll, putOne } from "./data/db";
-import type { AgentRecord } from "./data/schema";
+import type { AgentRecord, MessageRecord } from "./data/schema";
+import { normalizeMessageForDisplay } from "./messages/display";
 import { finalizeStaleUnfinalizedMessages } from "./requests/lifecycle";
 import {
   applyFontFamily,
@@ -36,6 +37,44 @@ function cssAttr(value: string): string {
   return value.replace(/["\\]/g, "\\$&");
 }
 
+interface StreamUpdatedDetail {
+  messageId: string;
+  content: string;
+  reasoning?: string;
+  reasoningDetails?: unknown[];
+}
+
+function updateStreamedMessageBody(
+  body: HTMLElement,
+  thinkingText: string,
+  visibleContent: string,
+): void {
+  let content = body.querySelector<HTMLElement>("[data-message-content]");
+  if (!content) {
+    content = document.createElement("pre");
+    content.dataset.messageContent = "";
+    body.append(content);
+  }
+  content.textContent = visibleContent;
+
+  if (!thinkingText) return;
+  let block = body.querySelector<HTMLDetailsElement>("[data-thinking-block]");
+  if (!block) {
+    block = document.createElement("details");
+    block.className = "thinking-block";
+    block.dataset.thinkingBlock = "";
+    block.open = getSettings().openThinkingByDefault;
+    const summary = document.createElement("summary");
+    summary.textContent = "thinking";
+    const thinking = document.createElement("pre");
+    thinking.dataset.thinkingContent = "";
+    block.append(summary, thinking);
+    body.insertBefore(block, content);
+  }
+  const thinking = block.querySelector<HTMLElement>("[data-thinking-content]");
+  if (thinking) thinking.textContent = thinkingText;
+}
+
 async function boot(): Promise<void> {
   applyFontFamily(getSettings().fontFamily);
   await ensureDefaultAgent();
@@ -46,13 +85,23 @@ async function boot(): Promise<void> {
   const rerender = async () => render(app, await loadState());
   window.addEventListener("app:changed", () => void rerender());
   window.addEventListener("app:stream-updated", (event) => {
-    const detail = (
-      event as CustomEvent<{ messageId: string; content: string }>
-    ).detail;
-    const content = app.querySelector<HTMLElement>(
-      `[data-message-content="${cssAttr(detail.messageId)}"]`,
+    const detail = (event as CustomEvent<StreamUpdatedDetail>).detail;
+    const body = app.querySelector<HTMLElement>(
+      `[data-message-body="${cssAttr(detail.messageId)}"]`,
     );
-    if (content) content.textContent = detail.content;
+    if (body) {
+      const display = normalizeMessageForDisplay({
+        content: detail.content,
+        reasoning: detail.reasoning,
+        reasoningDetails: detail.reasoningDetails,
+        finalized: false,
+      } as MessageRecord);
+      updateStreamedMessageBody(
+        body,
+        display.thinkingText,
+        display.visibleContent,
+      );
+    }
     const recentUserScroll =
       Date.now() - Number(app.dataset.lastUserScrollAt ?? 0) < 750;
     if (app.dataset.autoscroll !== "false" && !recentUserScroll) {
