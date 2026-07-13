@@ -9,6 +9,7 @@ import {
   getSettings,
   saveSettings,
 } from "./settings/settings";
+import { maybeRunPendingGithubSync, startGithubAutosync } from "./sync/github";
 import { bindEvents } from "./ui/events";
 import { render } from "./ui/render";
 import "@fontsource/atkinson-hyperlegible/latin-400.css";
@@ -83,7 +84,10 @@ async function boot(): Promise<void> {
   if (!app) throw new Error("Missing app root");
   bindEvents(app);
   const rerender = async () => render(app, await loadState());
-  window.addEventListener("app:changed", () => void rerender());
+  window.addEventListener("app:changed", () => {
+    void maybeRunPendingGithubSync().then(rerender);
+    void rerender();
+  });
   window.addEventListener("app:stream-updated", (event) => {
     const detail = (event as CustomEvent<StreamUpdatedDetail>).detail;
     const body = app.querySelector<HTMLElement>(
@@ -111,6 +115,7 @@ async function boot(): Promise<void> {
     }
   });
   window.addEventListener("popstate", () => void rerender());
+  startGithubAutosync();
   await rerender();
 }
 

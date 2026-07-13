@@ -5,6 +5,7 @@ import { siblings } from "../messages/tree";
 import { currentSettings, viewedHasInflight } from "../app/actions";
 import { composerDraftKey, readComposerDraft } from "./drafts";
 import { FONT_OPTIONS } from "../settings/settings";
+import { getGithubSyncState } from "../sync/state";
 
 type ParamField = {
   key: string;
@@ -644,21 +645,48 @@ function renderSettingsPanel(settings: {
   selectedAgentId: string | null;
   fontFamily: string;
 }): string {
-  return `<section class="right-panel"><label>openrouter api key <input data-setting-api-key type="password" value="${esc(settings.apiKey)}" placeholder="sk-or-..."></label><label>font <select data-setting-font>${FONT_OPTIONS.map((option) => `<option value="${attr(option.value)}" style="font-family: ${attr(option.value)}" ${settings.fontFamily === option.value ? "selected" : ""}>${esc(option.label)}</option>`).join("")}</select></label><div class="settings-actions"><button class="left-text-button save-settings-button" data-save-settings>save</button></div></section>`;
+  const sync = getGithubSyncState();
+  const tokenUrl =
+    "https://github.com/settings/personal-access-tokens/new?name=Tachyon+Sync&description=Sync+Tachyon+data&contents=write&expires_in=366";
+  return `<section class="right-panel"><label>openrouter api key <input data-setting-api-key type="password" value="${esc(settings.apiKey)}" placeholder="sk-or-..."></label><label>font <select data-setting-font>${FONT_OPTIONS.map((option) => `<option value="${attr(option.value)}" style="font-family: ${attr(option.value)}" ${settings.fontFamily === option.value ? "selected" : ""}>${esc(option.label)}</option>`).join("")}</select></label><div class="settings-group"><p><strong>github</strong></p><label>repository <input data-sync-repository value="${attr(sync.config.repository)}" placeholder="owner/repo"></label><label>branch <input data-sync-branch value="${attr(sync.config.branch)}" placeholder="default"></label><label>path <input data-sync-path value="${attr(sync.config.path)}" placeholder="tachyon-sync.json"></label><label>autosync <select data-sync-autosync><option value="off" ${sync.config.autosync === "off" ? "selected" : ""}>off</option><option value="30s" ${sync.config.autosync === "30s" ? "selected" : ""}>every 30s</option></select></label><label><a href="${attr(tokenUrl)}" target="_blank" rel="noreferrer">token</a> <input data-sync-token type="password" value="${attr(sync.config.token)}"></label></div><div class="settings-actions"><button class="left-text-button save-settings-button" data-save-settings>save</button></div></section>`;
 }
 
 function renderDataPanel(app: HTMLElement): string {
-  const review = parseImportReview(app);
+  const sync = getGithubSyncState();
+  const review = parseImportReview(app) ?? sync.pendingImportReview;
   const summary =
     review?.valid && review.summary ? renderImportSummary(review) : "";
   const error =
     review && !review.valid
       ? `<div class="import-review"><p><strong>cannot import this file</strong></p><p class="error">${esc(review.error ?? "Invalid export file.")}</p></div>`
       : "";
+  const syncReview = !app.dataset.importReview && !!sync.pendingImportReview;
   const actions = review?.valid
-    ? `<section class="data-row"><p class="field-help">Merge adds/updates safe records and skips conflicts.</p><button class="left-text-button" data-import-merge>merge</button></section><section class="data-row"><p class="field-help">Replace deletes local records missing from backup, then loads this backup.</p><button class="left-text-button" data-import-replace>replace</button></section>`
+    ? `<section class="data-row"><p class="field-help">Merge adds/updates safe records and skips conflicts.</p><button class="left-text-button" data-import-merge>merge</button></section><section class="data-row"><p class="field-help">Replace deletes local records missing from backup, then loads this backup.</p><button class="left-text-button" data-import-replace>replace</button></section>${syncReview ? `<section class="data-row"><p class="field-help">Overwrite remote with local data.</p><button class="left-text-button" data-sync-overwrite>overwrite</button></section>` : ""}`
     : "";
-  return `<section class="right-panel"><section class="data-row"><p class="field-help">Download a backup of all chats and agents.</p><button class="left-text-button" data-action="export">export data</button></section><section class="data-row"><p class="field-help">Upload a Tachyon backup.</p><label class="left-text-button import-button">choose file<input data-action="import" type="file" accept="application/json"></label></section>${error}${summary}${actions}</section>`;
+  const conflict = sync.conflictSummary
+    ? renderSyncConflictSummary(sync.conflictSummary)
+    : "";
+  const syncStatus = sync.error ? `${sync.status}: ${sync.error}` : sync.status;
+  return `<section class="right-panel"><section class="data-row sync-panel"><p><strong>github sync</strong></p><p class="field-help">status: ${esc(syncStatus)}</p><p class="field-help">last sync: ${esc(formatTime(sync.lastSync))}</p><p class="field-help">last pull: ${esc(formatTime(sync.lastPull))}</p><p class="field-help">last push: ${esc(formatTime(sync.lastPush))}</p>${conflict}<button class="left-text-button" data-sync-now>sync</button></section><section class="data-row"><p class="field-help">Download a backup of all chats and agents.</p><button class="left-text-button" data-action="export">export data</button></section><section class="data-row"><p class="field-help">Upload a Tachyon backup.</p><label class="left-text-button import-button">choose file<input data-action="import" type="file" accept="application/json"></label></section>${error}${summary}${actions}</section>`;
+}
+
+function formatTime(value: number | null): string {
+  return value ? new Date(value).toLocaleString() : "never";
+}
+
+function renderSyncConflictSummary(
+  summary: NonNullable<
+    ReturnType<typeof getGithubSyncState>["conflictSummary"]
+  >,
+): string {
+  const rows = ["sessions", "messages", "agents"]
+    .map(
+      (key) =>
+        `<p class="field-help">${esc(key)} ${summary[key as keyof typeof summary]?.quarantined ?? 0}</p>`,
+    )
+    .join("");
+  return `<div class="sync-conflicts"><p><strong>conflicts</strong></p>${rows}</div>`;
 }
 
 function parseImportReview(app: HTMLElement): {

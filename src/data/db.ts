@@ -1,3 +1,4 @@
+import { markGithubSyncDirty } from "../sync/state";
 import {
   DB_NAME,
   DB_VERSION,
@@ -71,11 +72,13 @@ export async function getOne<T>(
 export async function putOne<T>(name: Store, value: T): Promise<void> {
   const tx = await store("readwrite", name);
   await req(tx.objectStore(name).put(value));
+  if (name !== "quarantine") markGithubSyncDirty();
 }
 
 export async function deleteOne(name: Store, id: string): Promise<void> {
   const tx = await store("readwrite", name);
   await req(tx.objectStore(name).delete(id));
+  if (name !== "quarantine") markGithubSyncDirty();
 }
 
 export async function getMessagesBySession(
@@ -116,6 +119,7 @@ export async function replaceData(records: {
     tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(tx.error);
   });
+  markGithubSyncDirty();
 }
 
 export async function transactPut(records: {
@@ -140,6 +144,12 @@ export async function transactPut(records: {
     tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(tx.error);
   });
+  if (
+    records.sessions?.length ||
+    records.messages?.length ||
+    records.agents?.length
+  )
+    markGithubSyncDirty();
 }
 
 export async function snapshot(): Promise<DbSnapshot> {

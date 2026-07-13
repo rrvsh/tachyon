@@ -24,6 +24,12 @@ import { clearNotice, loadState, sessionIdFromUrl } from "../app/state";
 import { normalizeMessageForDisplay } from "../messages/display";
 import { siblings } from "../messages/tree";
 import { applyFontFamily } from "../settings/settings";
+import { overwriteGithubRemote, runGithubFullSync } from "../sync/github";
+import {
+  getGithubSyncState,
+  saveGithubSyncState,
+  updateGithubSyncConfig,
+} from "../sync/state";
 import {
   clearComposerDraft,
   composerDraftKey,
@@ -100,18 +106,50 @@ export function bindEvents(app: HTMLElement): void {
       delete app.dataset.agentFormId;
       return refresh();
     }
-    if (target.matches("[data-import-merge]")) {
-      const text = app.dataset.importReviewText;
-      if (text) await importJsonText(text);
+    if (target.matches("[data-sync-now]")) {
+      await runGithubFullSync();
+      return refresh();
+    }
+    if (target.matches("[data-sync-overwrite]")) {
+      await overwriteGithubRemote();
       delete app.dataset.importReview;
       delete app.dataset.importReviewText;
       return refresh();
     }
+    if (target.matches("[data-import-merge]")) {
+      const syncState = getGithubSyncState();
+      const syncReview = !app.dataset.importReviewText;
+      const text = app.dataset.importReviewText ?? syncState.pendingImportText;
+      if (text) await importJsonText(text);
+      delete app.dataset.importReview;
+      delete app.dataset.importReviewText;
+      if (syncReview)
+        saveGithubSyncState({
+          ...getGithubSyncState(),
+          status: "local changes",
+          dirtySince: Date.now(),
+          conflictSummary: null,
+          pendingImportText: null,
+          pendingImportReview: null,
+        });
+      return refresh();
+    }
     if (target.matches("[data-import-replace]")) {
-      const text = app.dataset.importReviewText;
+      const syncState = getGithubSyncState();
+      const syncReview = !app.dataset.importReviewText;
+      const text = app.dataset.importReviewText ?? syncState.pendingImportText;
       if (text) await replaceJsonText(text);
       delete app.dataset.importReview;
       delete app.dataset.importReviewText;
+      if (syncReview)
+        saveGithubSyncState({
+          ...getGithubSyncState(),
+          status: "local changes",
+          dirtySince: Date.now(),
+          conflictSummary: null,
+          pendingImportText: null,
+          pendingImportReview: null,
+        });
       return refresh();
     }
     if (target.matches("[data-copy-conversation]"))
@@ -325,6 +363,23 @@ export function bindEvents(app: HTMLElement): void {
         settings.leftSidebarCollapsed,
         settings.rightSidebarCollapsed,
       );
+      updateGithubSyncConfig({
+        repository:
+          (root.querySelector("[data-sync-repository]") as HTMLInputElement)
+            ?.value ?? "",
+        branch:
+          (root.querySelector("[data-sync-branch]") as HTMLInputElement)
+            ?.value ?? "",
+        path:
+          (root.querySelector("[data-sync-path]") as HTMLInputElement)?.value ||
+          "tachyon-sync.json",
+        autosync:
+          ((root.querySelector("[data-sync-autosync]") as HTMLSelectElement)
+            ?.value as "off" | "30s") ?? "off",
+        token:
+          (root.querySelector("[data-sync-token]") as HTMLInputElement)
+            ?.value ?? "",
+      });
       if (root instanceof HTMLDialogElement)
         root.dataset.settingsSaved = "true";
       refresh();
