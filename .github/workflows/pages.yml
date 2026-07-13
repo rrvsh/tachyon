@@ -40,6 +40,8 @@ jobs:
 
       - name: Check
         run: pnpm check
+        env:
+          VITE_BASE_PATH: /${{ github.event.repository.name }}/
 
       - name: Prepare SPA fallback
         run: cp dist/index.html dist/404.html
