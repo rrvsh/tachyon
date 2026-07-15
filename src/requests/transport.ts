@@ -1,6 +1,15 @@
+import type { AgentRecord } from "../data/schema";
+
+export interface TransportTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
 export interface TransportRequest {
-  payload: Record<string, unknown>;
-  apiKey?: string;
+  agent: AgentRecord;
+  turns: TransportTurn[];
+  sessionId: string;
+  openRouterApiKey?: string;
   signal: AbortSignal;
 }
 

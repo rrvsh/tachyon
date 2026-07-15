@@ -231,14 +231,14 @@ export async function getAgent(id: string): Promise<AgentRecord | undefined> {
   return getOne<AgentRecord>("agents", id);
 }
 export function updateSettings(
-  apiKey: string,
+  openRouterApiKey: string,
   selectedAgentId: string | null,
   fontFamily: string,
   openThinkingByDefault: boolean,
   rightSidebarCollapsed = currentSettings().rightSidebarCollapsed,
 ): void {
   saveSettings({
-    apiKey,
+    openRouterApiKey,
     selectedAgentId,
     fontFamily,
     openThinkingByDefault,

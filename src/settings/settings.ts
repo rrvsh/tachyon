@@ -44,9 +44,9 @@ export function getSettings(): SettingsRecord {
   try {
     const parsed = JSON.parse(
       localStorage.getItem(KEY) || "{}",
-    ) as Partial<SettingsRecord>;
+    ) as Partial<SettingsRecord> & { apiKey?: string };
     return {
-      apiKey: parsed.apiKey ?? "",
+      openRouterApiKey: parsed.openRouterApiKey ?? parsed.apiKey ?? "",
       selectedAgentId: parsed.selectedAgentId ?? null,
       fontFamily: parsed.fontFamily ?? DEFAULT_FONT_FAMILY,
       openThinkingByDefault: parsed.openThinkingByDefault ?? true,
@@ -54,7 +54,7 @@ export function getSettings(): SettingsRecord {
     };
   } catch {
     return {
-      apiKey: "",
+      openRouterApiKey: "",
       selectedAgentId: null,
       fontFamily: DEFAULT_FONT_FAMILY,
       openThinkingByDefault: true,

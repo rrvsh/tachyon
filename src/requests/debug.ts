@@ -15,10 +15,10 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 }
 
 export const debugTransport: Transport = {
-  async stream({ payload, signal }, onDelta) {
+  async stream({ turns, signal }, onDelta) {
     const text =
       new URLSearchParams(location.search).get("debugText") ||
-      `Debug response for ${(payload.messages as { content: string }[] | undefined)?.at(-1)?.content ?? "assistant-only request"}.`;
+      `Debug response for ${turns.at(-1)?.content ?? "assistant-only request"}.`;
     const delay = Number(
       new URLSearchParams(location.search).get("debugDelay") ?? "15",
     );

@@ -43,7 +43,7 @@ export interface QuarantineRecord {
 }
 
 export interface SettingsRecord {
-  apiKey: string;
+  openRouterApiKey: string;
   selectedAgentId: string | null;
   fontFamily: string;
   openThinkingByDefault: boolean;

@@ -6,8 +6,9 @@ import { currentSettings, viewedHasInflight } from "../app/actions";
 import { composerDraftKey, readComposerDraft } from "./drafts";
 import { FONT_OPTIONS } from "../settings/settings";
 import { getGithubSyncState } from "../sync/state";
+import { resolveAgentProvider } from "../agents/providers";
 
-type ParamField = {
+export type ParamField = {
   key: string;
   label: string;
   type?: string;
@@ -16,9 +17,9 @@ type ParamField = {
   options?: Array<{ value: string; label: string }>;
 };
 
-type ParamSection = { title: string; fields: ParamField[] };
+export type ParamSection = { title: string; fields: ParamField[] };
 
-const paramSections: ParamSection[] = [
+export const openRouterParamSections: ParamSection[] = [
   {
     title: "sampling",
     fields: [
@@ -637,7 +638,7 @@ function renderComposer(state: AppState, app: HTMLElement): string {
 
 function renderRightSidebar(
   settings: {
-    apiKey: string;
+    openRouterApiKey: string;
     selectedAgentId: string | null;
     fontFamily: string;
   },
@@ -656,7 +657,7 @@ function renderSessionsPanel(state: AppState): string {
 }
 
 function renderSettingsPanel(settings: {
-  apiKey: string;
+  openRouterApiKey: string;
   selectedAgentId: string | null;
   fontFamily: string;
 }): string {
@@ -677,7 +678,7 @@ function renderSettingsPanel(settings: {
     <section class="right-panel">
       <label>
         openrouter api key
-        <input data-setting-api-key type="password" value="${esc(settings.apiKey)}" placeholder="sk-or-...">
+        <input data-setting-api-key type="password" value="${esc(settings.openRouterApiKey)}" placeholder="sk-or-...">
       </label>
 
       <label>
@@ -903,8 +904,18 @@ function renderAgentForm(state: AppState, app: HTMLElement): string {
     mode === "edit"
       ? state.agents.find((a) => a.id === app.dataset.agentFormId)
       : undefined;
+  const draftAgent: AgentRecord = agent ?? {
+    id: "",
+    name: "",
+    model: "",
+    systemPrompt: "",
+    params: {},
+    createdAt: 0,
+    updatedAt: 0,
+    archived: false,
+  };
   const status = agent ? `editing: ${esc(agent.name)}` : "creating new agent";
-  return `<div class="agent-fields-section"><p class="agent-form-status">${status}</p><form class="agent-form" data-agent-form><input type="hidden" name="id" value="${attr(agent?.id ?? "")}"><label>name<input name="name" value="${attr(agent?.name ?? "")}" placeholder="concise assistant"></label><label>model slug<input name="model" value="${attr(agent?.model ?? "")}" placeholder="openai/gpt-4o-mini"></label><label>system prompt<textarea name="systemPrompt" placeholder="You are concise and practical.">${esc(agent?.systemPrompt ?? "")}</textarea></label>${renderParamFields(agent?.params)}<div class="settings-actions"><button class="left-text-button save-agent-button" aria-label="Save agent" title="Save agent">save</button><button type="button" class="left-text-button" data-agent-form-cancel>cancel</button></div></form></div>`;
+  return `<div class="agent-fields-section"><p class="agent-form-status">${status}</p><form class="agent-form" data-agent-form><input type="hidden" name="id" value="${attr(agent?.id ?? "")}"><label>name<input name="name" value="${attr(agent?.name ?? "")}" placeholder="concise assistant"></label><label>model slug<input name="model" value="${attr(agent?.model ?? "")}" placeholder="openai/gpt-4o-mini"></label><label>system prompt<textarea name="systemPrompt" placeholder="You are concise and practical.">${esc(agent?.systemPrompt ?? "")}</textarea></label>${renderParamFields(draftAgent, agent?.params)}<div class="settings-actions"><button class="left-text-button save-agent-button" aria-label="Save agent" title="Save agent">save</button><button type="button" class="left-text-button" data-agent-form-cancel>cancel</button></div></form></div>`;
 }
 
 function readPath(source: Record<string, unknown>, path: string): unknown {
@@ -919,7 +930,19 @@ function stringifyParam(value: unknown): string {
   return typeof value === "string" ? value : JSON.stringify(value);
 }
 
-function renderParamFields(params: Record<string, unknown> = {}): string {
+export function getParamSectionsForAgent(agent: AgentRecord): ParamSection[] {
+  const provider = resolveAgentProvider(agent);
+  if (provider === "openrouter") return openRouterParamSections;
+  return [];
+}
+
+function renderParamFields(
+  agent: AgentRecord | null,
+  params: Record<string, unknown> = {},
+): string {
+  if (!agent) return "";
+  const paramSections = getParamSectionsForAgent(agent);
+  const provider = resolveAgentProvider(agent);
   const commonKeys = new Set(
     paramSections.flatMap((section) =>
       section.fields.map((field) => field.key.split(".")[0]),
@@ -932,14 +955,20 @@ function renderParamFields(params: Record<string, unknown> = {}): string {
         `<div class="extra-param-row"><input name="extraParamKey" placeholder="key" value="${attr(key)}"><input name="extraParamValue" placeholder="value or JSON" value="${attr(stringifyParam(value))}"><button class="icon-button" type="button" aria-label="Remove field" title="Remove field">×</button></div>`,
     )
     .join("");
-  return `<details class="params-grid"><summary><a href="https://openrouter.ai/docs/api/reference/parameters" target="_blank" rel="noreferrer">params</a></summary>${paramSections
-    .map(
-      (section) =>
-        `<details class="param-section"><summary>${esc(section.title)}</summary><div class="param-section-body">${section.fields.map((field) => renderParamField(field, params)).join("")}</div></details>`,
-    )
-    .join(
-      "",
-    )}<details class="extra-config"><summary>extra config</summary><div class="param-section-body"><p class="field-help">Add provider-specific or advanced OpenRouter request parameters not listed above.</p><div class="extra-param-list" data-extra-param-list>${extraRows}</div><button type="button" class="secondary-button" data-add-param>+ field</button></div></details></details>`;
+  const renderedSections =
+    provider === "openrouter"
+      ? paramSections
+          .map(
+            (section) =>
+              `<details class="param-section"><summary>${esc(section.title)}</summary><div class="param-section-body">${section.fields.map((field) => renderParamField(field, params)).join("")}</div></details>`,
+          )
+          .join("")
+      : "";
+  const extraConfig =
+    provider === "openrouter"
+      ? `<details class="extra-config"><summary>extra config</summary><div class="param-section-body"><p class="field-help">Add advanced OpenRouter request parameters not listed above.</p><div class="extra-param-list" data-extra-param-list>${extraRows}</div><button type="button" class="secondary-button" data-add-param>+ field</button></div></details>`
+      : "";
+  return `<details class="params-grid"><summary><a href="https://openrouter.ai/docs/api/reference/parameters" target="_blank" rel="noreferrer">OpenRouter params</a></summary>${renderedSections}${extraConfig}</details>`;
 }
 
 function renderParamField(
