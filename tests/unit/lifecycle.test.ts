@@ -19,7 +19,7 @@ describe("request lifecycle", () => {
     const a = defaultAgent();
     await putOne("agents", a);
     saveSettings({
-      apiKey: "",
+      openRouterApiKey: "",
       selectedAgentId: a.id,
       fontFamily: DEFAULT_FONT_FAMILY,
       openThinkingByDefault: true,
@@ -94,7 +94,8 @@ describe("request lifecycle", () => {
     ];
     for (const message of chain) await putOne("messages", message);
 
-    let payloadMessages: Array<{ role: string; content: string }> = [];
+    let transportTurns: Array<{ role: string; content: string }> = [];
+    let sawPayload = false;
     await startRequest({
       sessionId: session.id,
       parentId: "u2",
@@ -102,10 +103,8 @@ describe("request lifecycle", () => {
       notify: vi.fn(),
       transport: {
         async stream(request) {
-          payloadMessages = request.payload.messages as Array<{
-            role: string;
-            content: string;
-          }>;
+          sawPayload = "payload" in request;
+          transportTurns = request.turns;
         },
       },
     });
@@ -118,10 +117,11 @@ describe("request lifecycle", () => {
       ).toBe(true),
     );
 
-    expect(payloadMessages.map((m) => m.content)).toEqual([
-      "visible user",
-      "visible descendant",
-      "next",
+    expect(sawPayload).toBe(false);
+    expect(transportTurns).toEqual([
+      { role: "user", content: "visible user" },
+      { role: "user", content: "visible descendant" },
+      { role: "user", content: "next" },
     ]);
   });
 

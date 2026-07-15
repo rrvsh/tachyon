@@ -35,23 +35,3 @@ export function assertValidAgentConfig(agent: AgentRecord): void {
   const errors = validateAgentConfig(agent);
   if (errors.length) throw new Error(errors.join("\n"));
 }
-
-export interface OpenRouterMessage {
-  role: "system" | "user" | "assistant";
-  content: string;
-}
-
-export function assemblePayload(
-  agent: AgentRecord,
-  messages: OpenRouterMessage[],
-): Record<string, unknown> {
-  assertValidAgentConfig(agent);
-  return {
-    ...agent.params,
-    model: agent.model,
-    messages: agent.systemPrompt.trim()
-      ? [{ role: "system", content: agent.systemPrompt }, ...messages]
-      : messages,
-    stream: true,
-  };
-}

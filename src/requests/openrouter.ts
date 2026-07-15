@@ -1,14 +1,25 @@
+import { assertValidAgentConfig } from "../agents/agents";
 import type { Transport } from "./transport";
 
 export const openRouterTransport: Transport = {
-  async stream({ payload, apiKey, signal }, onDelta) {
+  async stream({ agent, turns, openRouterApiKey, signal }, onDelta) {
+    assertValidAgentConfig(agent);
+    const payload = {
+      ...agent.params,
+      model: agent.model,
+      messages: agent.systemPrompt.trim()
+        ? [{ role: "system", content: agent.systemPrompt }, ...turns]
+        : turns,
+      stream: true,
+    };
+
     const response = await fetch(
       "https://openrouter.ai/api/v1/chat/completions",
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey ?? ""}`,
+          Authorization: `Bearer ${openRouterApiKey ?? ""}`,
           "HTTP-Referer": location.origin,
           "X-Title": "Tachyon",
         },

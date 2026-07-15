@@ -283,7 +283,7 @@ export function bindEvents(app: HTMLElement): void {
     if (target.matches("[data-composer-agent]")) {
       const settings = currentSettings();
       updateSettings(
-        settings.apiKey,
+        settings.openRouterApiKey,
         (target as HTMLSelectElement).value || null,
         settings.fontFamily,
         settings.openThinkingByDefault,
@@ -295,7 +295,7 @@ export function bindEvents(app: HTMLElement): void {
     if (target.matches("[data-open-thinking-default]")) {
       const settings = currentSettings();
       updateSettings(
-        settings.apiKey,
+        settings.openRouterApiKey,
         settings.selectedAgentId,
         settings.fontFamily,
         (target as HTMLSelectElement).value === "open",
@@ -328,7 +328,7 @@ export function bindEvents(app: HTMLElement): void {
       const settings = currentSettings();
       const collapsed = !(app.dataset.rightSidebarCollapsed !== "false");
       updateSettings(
-        settings.apiKey,
+        settings.openRouterApiKey,
         settings.selectedAgentId,
         settings.fontFamily,
         settings.openThinkingByDefault,
@@ -512,7 +512,7 @@ function resetSettingsDialog(dialog: HTMLDialogElement): void {
     "[data-setting-api-key]",
   ) as HTMLInputElement;
   const font = dialog.querySelector("[data-setting-font]") as HTMLSelectElement;
-  api.value = settings.apiKey;
+  api.value = settings.openRouterApiKey;
   font.value = settings.fontFamily;
   applyFontFamily(settings.fontFamily);
 }

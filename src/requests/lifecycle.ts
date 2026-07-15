@@ -1,4 +1,3 @@
-import { assemblePayload, type OpenRouterMessage } from "../agents/agents";
 import { getMessagesBySession, getOne, putOne, transactPut } from "../data/db";
 import type { AgentRecord, MessageRecord, SessionRecord } from "../data/schema";
 import { makeMessage, makeSession, deriveTitle } from "../messages/operations";
@@ -68,7 +67,7 @@ export async function startRequest(input: {
       ? await getOne<AgentRecord>("agents", settings.selectedAgentId)
       : undefined;
     if (!agent) throw new Error("Select an agent before starting a request.");
-    if (!debug && !settings.apiKey)
+    if (!debug && !settings.openRouterApiKey)
       throw new Error("OpenRouter API key is required.");
 
     let session = input.sessionId
@@ -125,11 +124,10 @@ export async function startRequest(input: {
       ...path,
       ...requestMessages.filter((m) => m.role === "user"),
     ].filter((m) => !m.deletedAt);
-    const context: OpenRouterMessage[] = contextRecords.map((m) => ({
+    const turns = contextRecords.map((m) => ({
       role: m.role,
       content: m.content,
     }));
-    const payload = assemblePayload(agent, context);
 
     await transactPut({ sessions: [session], messages: requestMessages });
     setCurrentPointer(sessionId, assistant.id);
@@ -153,7 +151,13 @@ export async function startRequest(input: {
       input.transport ?? (debug ? debugTransport : openRouterTransport);
     void transport
       .stream(
-        { payload, apiKey: settings.apiKey, signal: abortController.signal },
+        {
+          agent,
+          turns,
+          sessionId,
+          openRouterApiKey: settings.openRouterApiKey,
+          signal: abortController.signal,
+        },
         async (delta) => {
           const current = await getOne<MessageRecord>("messages", assistant.id);
           if (!current || current.finalized) return;
