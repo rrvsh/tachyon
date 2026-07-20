@@ -403,6 +403,50 @@ test("user scroll intent disables streaming autoscroll", async ({ page }) => {
   ).resolves.toBe("false");
 });
 
+test("focused composer input survives background rerenders", async ({
+  page,
+}) => {
+  await page.goto("/?debug=1");
+  const composer = page.getByPlaceholder("Message (empty for assistant-only)");
+  await composer.fill("keep my draft");
+  await composer.evaluate((textarea: HTMLTextAreaElement) => {
+    textarea.setSelectionRange(5, 7);
+    window.dispatchEvent(new CustomEvent("app:changed"));
+  });
+
+  await expect(composer).toBeFocused();
+  await expect(composer).toHaveValue("keep my draft");
+  await expect
+    .poll(() =>
+      composer.evaluate((textarea: HTMLTextAreaElement) => ({
+        start: textarea.selectionStart,
+        end: textarea.selectionEnd,
+      })),
+    )
+    .toEqual({ start: 5, end: 7 });
+});
+
+test("right sidebar scroll survives background rerenders", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 520 });
+  await page.goto("/?debug=1");
+  await page.getByRole("button", { name: "agents" }).click();
+  await page.getByRole("button", { name: "create new" }).click();
+  await page.locator(".params-grid > summary").click();
+  await page.locator(".right-sidebar").evaluate((sidebar) => {
+    sidebar
+      .querySelectorAll<HTMLDetailsElement>("details")
+      .forEach((details) => {
+        details.open = true;
+      });
+    sidebar.scrollTop = sidebar.scrollHeight;
+    window.dispatchEvent(new CustomEvent("app:changed"));
+  });
+
+  await expect
+    .poll(() => page.locator(".right-sidebar").evaluate((el) => el.scrollTop))
+    .toBeGreaterThan(0);
+});
+
 test("composer stays pinned when the right sidebar content grows", async ({
   page,
 }) => {

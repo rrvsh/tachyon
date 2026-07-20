@@ -397,6 +397,165 @@ function attr(value: unknown): string {
   return esc(String(value ?? ""));
 }
 
+type RestorableControl =
+  HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+
+interface ControlSnapshot {
+  selector: string;
+  index: number;
+  value: string;
+  checked?: boolean;
+}
+
+interface FocusSnapshot extends ControlSnapshot {
+  selectionStart: number | null;
+  selectionEnd: number | null;
+}
+
+function isRestorableControl(element: Element): element is RestorableControl {
+  if (
+    element instanceof HTMLInputElement &&
+    ![
+      "button",
+      "checkbox",
+      "file",
+      "hidden",
+      "image",
+      "radio",
+      "reset",
+      "submit",
+    ].includes(element.type)
+  )
+    return true;
+  return (
+    element instanceof HTMLTextAreaElement ||
+    element instanceof HTMLSelectElement
+  );
+}
+
+function controlSelector(control: RestorableControl): string | null {
+  if (control instanceof HTMLTextAreaElement && control.dataset.editTextarea)
+    return `[data-edit-textarea="${CSS.escape(control.dataset.editTextarea)}"]`;
+  if (control.matches(".composer textarea[name='message']"))
+    return `.composer textarea[name="message"]`;
+  const dataAttributes = [
+    "composerAgent",
+    "openThinkingDefault",
+    "settingApiKey",
+    "settingFont",
+    "syncRepository",
+    "syncBranch",
+    "syncPath",
+    "syncAutosync",
+    "syncToken",
+  ] as const;
+  for (const key of dataAttributes) {
+    if (key in control.dataset) {
+      return `[data-${key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}]`;
+    }
+  }
+  const name = control.getAttribute("name");
+  if (!name) return null;
+  const tag = control.tagName.toLowerCase();
+  if (control.closest("[data-agent-form]"))
+    return `[data-agent-form] ${tag}[name="${CSS.escape(name)}"]`;
+  const dialog = control.closest<HTMLDialogElement>("dialog[id]");
+  if (dialog)
+    return `#${CSS.escape(dialog.id)} ${tag}[name="${CSS.escape(name)}"]`;
+  if (control.closest(".right-sidebar"))
+    return `.right-sidebar ${tag}[name="${CSS.escape(name)}"]`;
+  return `${tag}[name="${CSS.escape(name)}"]`;
+}
+
+function snapshotControl(
+  app: HTMLElement,
+  control: RestorableControl,
+): ControlSnapshot | null {
+  const selector = controlSelector(control);
+  if (!selector) return null;
+  const controls = Array.from(
+    app.querySelectorAll<RestorableControl>(selector),
+  );
+  const index = Math.max(0, controls.indexOf(control));
+  return {
+    selector,
+    index,
+    value: control.value,
+    checked: control instanceof HTMLInputElement ? control.checked : undefined,
+  };
+}
+
+function captureControlSnapshots(app: HTMLElement): ControlSnapshot[] {
+  return Array.from(app.querySelectorAll("input, textarea, select"))
+    .filter(isRestorableControl)
+    .map((control) => snapshotControl(app, control))
+    .filter((snapshot): snapshot is ControlSnapshot => !!snapshot);
+}
+
+function captureFocusSnapshot(app: HTMLElement): FocusSnapshot | null {
+  const active = document.activeElement;
+  if (!active || !app.contains(active) || !isRestorableControl(active))
+    return null;
+  const snapshot = snapshotControl(app, active);
+  if (!snapshot) return null;
+  return {
+    ...snapshot,
+    selectionStart: "selectionStart" in active ? active.selectionStart : null,
+    selectionEnd: "selectionEnd" in active ? active.selectionEnd : null,
+  };
+}
+
+function findControl(
+  app: HTMLElement,
+  snapshot: ControlSnapshot,
+): RestorableControl | null {
+  return (
+    app.querySelectorAll<RestorableControl>(snapshot.selector)[
+      snapshot.index
+    ] ?? null
+  );
+}
+
+function restoreControlSnapshots(
+  app: HTMLElement,
+  snapshots: ControlSnapshot[],
+): void {
+  for (const snapshot of snapshots) {
+    const control = findControl(app, snapshot);
+    if (!control) continue;
+    control.value = snapshot.value;
+    if (control instanceof HTMLInputElement && snapshot.checked !== undefined)
+      control.checked = snapshot.checked;
+  }
+}
+
+function restoreFocusSnapshot(
+  app: HTMLElement,
+  snapshot: FocusSnapshot | null,
+): void {
+  if (!snapshot) return;
+  const control = findControl(app, snapshot);
+  if (!control) return;
+  control.focus({ preventScroll: true });
+  if (
+    "setSelectionRange" in control &&
+    snapshot.selectionStart !== null &&
+    snapshot.selectionEnd !== null
+  ) {
+    control.setSelectionRange(snapshot.selectionStart, snapshot.selectionEnd);
+  }
+}
+
+function activeElementIsAuxiliaryInput(app: HTMLElement): boolean {
+  const active = document.activeElement;
+  return !!(
+    active &&
+    app.contains(active) &&
+    isRestorableControl(active) &&
+    (active.closest(".right-sidebar") || active.closest("dialog"))
+  );
+}
+
 export function render(app: HTMLElement, state: AppState): void {
   const settings = currentSettings();
   const previousSessionId = app.dataset.renderSessionId ?? "";
@@ -408,7 +567,17 @@ export function render(app: HTMLElement, state: AppState): void {
   const rightSidebarTab = app.dataset.rightSidebarTab ?? "sessions";
   const previousConversation = app.querySelector<HTMLElement>(".conversation");
   const previousScrollTop = previousConversation?.scrollTop ?? 0;
-  const openDialogId = app.querySelector<HTMLDialogElement>("dialog[open]")?.id;
+  const previousConversationNearBottom = previousConversation
+    ? isNearBottom(previousConversation)
+    : true;
+  const previousRightSidebar = app.querySelector<HTMLElement>(".right-sidebar");
+  const previousRightSidebarScrollTop = previousRightSidebar?.scrollTop ?? 0;
+  const openDialog = app.querySelector<HTMLDialogElement>("dialog[open]");
+  const openDialogId = openDialog?.id;
+  const openDialogScrollTop = openDialog?.scrollTop ?? 0;
+  const focusSnapshot = captureFocusSnapshot(app);
+  const controlSnapshots = captureControlSnapshots(app);
+  const focusedInAuxiliaryInput = activeElementIsAuxiliaryInput(app);
   const sessionChanged = previousSessionId !== nextSessionId;
   const preserveScrollMessageId = app.dataset.preserveScrollMessageId;
   const preserveScrollViewportY = Number(app.dataset.preserveScrollViewportY);
@@ -417,7 +586,9 @@ export function render(app: HTMLElement, state: AppState): void {
     !preserveScrollMessageId &&
     (!previousConversation ||
       sessionChanged ||
-      app.dataset.autoscroll !== "false");
+      (app.dataset.autoscroll !== "false" &&
+        previousConversationNearBottom &&
+        !focusedInAuxiliaryInput));
   const thinkingOpenByMessage = new Map(
     Array.from(
       app.querySelectorAll<HTMLElement>("[data-message-body]"),
@@ -458,6 +629,11 @@ export function render(app: HTMLElement, state: AppState): void {
     app.dataset.autoscroll = "true";
   }
 
+  if (!sessionChanged) restoreControlSnapshots(app, controlSnapshots);
+
+  const rightSidebar = app.querySelector<HTMLElement>(".right-sidebar");
+  if (rightSidebar) rightSidebar.scrollTop = previousRightSidebarScrollTop;
+
   const conversation = app.querySelector<HTMLElement>(".conversation");
   if (conversation) {
     bindScrollIntent(app, conversation);
@@ -485,6 +661,7 @@ export function render(app: HTMLElement, state: AppState): void {
       } else {
         conversation.scrollTop = previousScrollTop;
       }
+      if (!sessionChanged) restoreFocusSnapshot(app, focusSnapshot);
     });
   }
 
@@ -493,6 +670,7 @@ export function render(app: HTMLElement, state: AppState): void {
       openDialogId,
     ) as HTMLDialogElement | null;
     if (dialog && !dialog.open) dialog.showModal();
+    if (dialog) dialog.scrollTop = openDialogScrollTop;
   }
 }
 
