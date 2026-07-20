@@ -16,6 +16,18 @@ interface RemoteFile {
   sha: string;
 }
 
+interface GithubContentFile {
+  content?: string;
+  encoding?: string;
+  sha?: string;
+  type?: string;
+}
+
+interface GithubBlob {
+  content?: string;
+  encoding?: string;
+}
+
 function parseRepository(repository: string): { owner: string; repo: string } {
   const [owner, repo] = repository.trim().split("/");
   if (!owner || !repo) throw new Error("GitHub repository must be owner/repo.");
@@ -68,6 +80,24 @@ async function defaultBranch(config: GithubSyncConfig): Promise<string> {
   return data.default_branch;
 }
 
+async function fetchBlobText(
+  config: GithubSyncConfig,
+  owner: string,
+  repo: string,
+  sha: string,
+): Promise<string> {
+  const blob = await githubFetch<GithubBlob>(
+    config,
+    `https://api.github.com/repos/${owner}/${repo}/git/blobs/${sha}`,
+  );
+  if (typeof blob.content !== "string" || blob.encoding !== "base64") {
+    throw new Error(
+      "Remote file content is unavailable from GitHub. Use a smaller JSON file path.",
+    );
+  }
+  return decodeBase64(blob.content);
+}
+
 export async function fetchRemoteFile(
   config: GithubSyncConfig,
 ): Promise<RemoteFile | null> {
@@ -89,9 +119,23 @@ export async function fetchRemoteFile(
       `GitHub ${response.status}: ${body || response.statusText}`,
     );
   }
-  const data = (await response.json()) as { content?: string; sha?: string };
-  if (!data.content || !data.sha) throw new Error("Remote path is not a file.");
-  return { text: decodeBase64(data.content), sha: data.sha };
+  const data = (await response.json()) as GithubContentFile | unknown[];
+  if (Array.isArray(data)) {
+    throw new Error(
+      "Remote path points to a directory. Choose a JSON file path such as tachyon-sync.json.",
+    );
+  }
+  if (data.type && data.type !== "file") {
+    throw new Error(`Remote path is a ${data.type}, not a file.`);
+  }
+  if (!data.sha) throw new Error("Remote file is missing a GitHub SHA.");
+  if (data.encoding === "base64" && typeof data.content === "string") {
+    return { text: decodeBase64(data.content), sha: data.sha };
+  }
+  return {
+    text: await fetchBlobText(config, owner, repo, data.sha),
+    sha: data.sha,
+  };
 }
 
 export async function pushRemoteFile(
