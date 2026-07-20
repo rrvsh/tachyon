@@ -87,7 +87,9 @@ async function boot(): Promise<void> {
   bindKeyboardInset();
   const rerender = async () => render(app, await loadState());
   window.addEventListener("app:changed", () => {
-    void maybeRunPendingGithubSync().then(rerender);
+    void maybeRunPendingGithubSync().then((changed) => {
+      if (changed) void rerender();
+    });
     void rerender();
   });
   window.addEventListener("app:stream-updated", (event) => {

@@ -278,10 +278,11 @@ export async function overwriteGithubRemote(): Promise<GithubSyncState> {
   });
 }
 
-export async function maybeRunPendingGithubSync(): Promise<void> {
+export async function maybeRunPendingGithubSync(): Promise<boolean> {
   const state = getGithubSyncState();
-  if (!state.autosyncPending || requestRegistry.size) return;
+  if (!state.autosyncPending || requestRegistry.size) return false;
   await runGithubFullSync();
+  return true;
 }
 
 export function startGithubAutosync(): void {
