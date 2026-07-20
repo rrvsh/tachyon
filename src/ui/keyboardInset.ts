@@ -6,10 +6,9 @@ export function computeKeyboardInset(
   return Math.max(0, layoutHeight - visualHeight - visualOffsetTop);
 }
 
-function isEditableElement(element: Element | null): boolean {
+export function isKeyboardAdjustedElement(element: Element | null): boolean {
   if (!(element instanceof HTMLElement)) return false;
-  if (element.isContentEditable) return true;
-  return element.matches("textarea, input, select");
+  return element.matches(".composer textarea, [data-edit-textarea]");
 }
 
 export function bindKeyboardInset(
@@ -21,7 +20,7 @@ export function bindKeyboardInset(
   const update = () => {
     frame = 0;
     const activeElement = document.activeElement;
-    const shouldApply = isEditableElement(activeElement);
+    const shouldApply = isKeyboardAdjustedElement(activeElement);
     const inset =
       shouldApply && viewport
         ? computeKeyboardInset(
