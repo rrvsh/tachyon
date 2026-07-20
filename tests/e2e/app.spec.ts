@@ -426,6 +426,31 @@ test("focused composer input survives background rerenders", async ({
     .toEqual({ start: 5, end: 7 });
 });
 
+test("right sidebar form input survives background rerenders", async ({
+  page,
+}) => {
+  await page.goto("/?debug=1");
+  await page.getByRole("button", { name: "agents" }).click();
+  await page.getByRole("button", { name: "create new" }).click();
+  const name = page.locator('[data-agent-form] input[name="name"]');
+  await name.fill("draft agent");
+  await name.evaluate((input: HTMLInputElement) => {
+    input.setSelectionRange(2, 7);
+    window.dispatchEvent(new CustomEvent("app:changed"));
+  });
+
+  await expect(name).toBeFocused();
+  await expect(name).toHaveValue("draft agent");
+  await expect
+    .poll(() =>
+      name.evaluate((input: HTMLInputElement) => ({
+        start: input.selectionStart,
+        end: input.selectionEnd,
+      })),
+    )
+    .toEqual({ start: 2, end: 7 });
+});
+
 test("right sidebar scroll survives background rerenders", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 520 });
   await page.goto("/?debug=1");
