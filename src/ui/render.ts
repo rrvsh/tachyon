@@ -440,9 +440,10 @@ export function render(app: HTMLElement, state: AppState): void {
         <div class="notices">${state.errors.map((e, index) => `<p class="error" data-dismiss-notice="error:${index}" title="Dismiss">${esc(e)}</p>`).join("")}${state.info.map((e, index) => `<p class="info" data-dismiss-notice="info:${index}" title="Dismiss">${esc(e)}</p>`).join("")}</div>
         <section class="conversation">
           ${state.session ? renderMessages(state, app, thinkingOpenByMessage) : renderBlankState()}
+          ${renderComposerControls(state)}
           <div class="scroll-anchor" data-scroll-anchor></div>
         </section>
-        ${renderComposer(state, app)}
+        ${renderComposerInput(state, app)}
       </main>
 
       <button class="mobile-sidebar-backdrop" type="button" data-toggle-right-sidebar aria-label="close sidebar" ${rightSidebarCollapsed ? "hidden" : ""}></button>
@@ -611,13 +612,7 @@ export function renderDisplayContent(
   return `${thinkingText ? `<details class="thinking-block" data-thinking-block ${openThinking ? "open" : ""}><summary>thinking</summary><pre data-thinking-content>${esc(thinkingText)}</pre></details>` : ""}<pre data-message-content>${esc(visibleContent)}</pre>`;
 }
 
-function renderComposer(state: AppState, app: HTMLElement): string {
-  const abort = viewedHasInflight();
-  const draftKey = composerDraftKey(state.sessionId);
-  const draft =
-    app.dataset.composerDraftKey === draftKey
-      ? (app.dataset.composerDraft ?? "")
-      : readComposerDraft(state.sessionId);
+function renderComposerControls(state: AppState): string {
   const settings = currentSettings();
   const newChatButton = state.session
     ? `<button class="left-text-button" type="button" data-action="new-session" aria-label="new chat" title="new chat">new chat</button>`
@@ -633,7 +628,17 @@ function renderComposer(state: AppState, app: HTMLElement): string {
     )
     .join("")}</select></label>`;
   const thinkingDefault = `<label class="composer-agent-label">thinking blocks: <select data-open-thinking-default aria-label="thinking blocks"><option value="open" ${settings.openThinkingByDefault ? "selected" : ""}>open</option><option value="closed" ${settings.openThinkingByDefault ? "" : "selected"}>closed</option></select></label>`;
-  return `<form class="composer" data-compose><div class="composer-context"><div class="composer-selects">${agentSelect}${thinkingDefault}</div><div class="composer-actions">${newChatButton}${copyButton}</div></div><div class="composer-box"><textarea name="message" rows="1" enterkeyhint="send" placeholder="Message (empty for assistant-only)">${esc(draft)}</textarea><button class="icon-button send-button" type="submit" aria-label="${abort ? "Abort" : "Send"}" title="${abort ? "Abort" : "Send"}">${abort ? "halt" : "send"}</button></div></form>`;
+  return `<div class="composer-context composer-flow-controls"><div class="composer-selects">${agentSelect}${thinkingDefault}</div><div class="composer-actions">${newChatButton}${copyButton}</div></div>`;
+}
+
+function renderComposerInput(state: AppState, app: HTMLElement): string {
+  const abort = viewedHasInflight();
+  const draftKey = composerDraftKey(state.sessionId);
+  const draft =
+    app.dataset.composerDraftKey === draftKey
+      ? (app.dataset.composerDraft ?? "")
+      : readComposerDraft(state.sessionId);
+  return `<form class="composer" data-compose><div class="composer-box"><textarea name="message" rows="1" enterkeyhint="send" placeholder="Message (empty for assistant-only)">${esc(draft)}</textarea><button class="icon-button send-button" type="submit" aria-label="${abort ? "Abort" : "Send"}" title="${abort ? "Abort" : "Send"}">${abort ? "halt" : "send"}</button></div></form>`;
 }
 
 function renderRightSidebar(

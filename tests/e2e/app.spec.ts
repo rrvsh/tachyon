@@ -269,11 +269,13 @@ test("copy conversation uses visible content and omits deleted thinking", async 
     .getByRole("button", { name: "Delete", exact: true })
     .click();
   await page
-    .locator(".composer")
+    .locator(".composer-flow-controls")
     .getByRole("button", { name: "Copy conversation", exact: true })
     .click();
   await expect(
-    page.locator(".composer").getByRole("button", { name: "copied!" }),
+    page
+      .locator(".composer-flow-controls")
+      .getByRole("button", { name: "copied!" }),
   ).toBeVisible();
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   expect(copied).toContain("session:");
@@ -340,6 +342,41 @@ test("import and export flow uses canonical JSON records", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "Imported E2E Session" }),
   ).toBeVisible();
+});
+
+test("composer controls sit below the last message outside the pinned composer", async ({
+  page,
+}) => {
+  await page.goto("/?debug=1&debugDelay=0&debugText=controls below");
+  await page
+    .getByPlaceholder("Message (empty for assistant-only)")
+    .fill("place controls");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.locator(".message.assistant")).toContainText(
+    "controls below",
+  );
+
+  await expect(page.locator(".composer .composer-context")).toHaveCount(0);
+  await expect(page.locator(".composer-flow-controls")).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const lastMessage = document.querySelector(
+          ".messages .message:last-child",
+        );
+        const controls = document.querySelector(".composer-flow-controls");
+        const composer = document.querySelector(".composer");
+        if (!lastMessage || !controls || !composer) return null;
+        const messageRect = lastMessage.getBoundingClientRect();
+        const controlsRect = controls.getBoundingClientRect();
+        const composerRect = composer.getBoundingClientRect();
+        return {
+          controlsBelowMessage: controlsRect.top >= messageRect.bottom,
+          controlsAboveComposer: controlsRect.bottom <= composerRect.top,
+        };
+      }),
+    )
+    .toEqual({ controlsBelowMessage: true, controlsAboveComposer: true });
 });
 
 test("user scroll intent disables streaming autoscroll", async ({ page }) => {

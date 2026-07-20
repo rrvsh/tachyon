@@ -733,6 +733,10 @@ pre {
   padding-bottom: 0.2rem;
 }
 
+.composer-flow-controls {
+  margin-top: 0.75rem;
+}
+
 .thinking-block {
   border: 1px solid var(--border);
   margin-bottom: 0.75rem;
