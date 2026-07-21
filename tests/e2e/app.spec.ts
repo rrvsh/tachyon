@@ -379,6 +379,53 @@ test("composer controls sit below the last message outside the pinned composer",
     .toEqual({ controlsBelowMessage: true, controlsAboveComposer: true });
 });
 
+test("desktop back to top sits below prompt and scrolls conversation", async ({
+  page,
+}) => {
+  const longText = Array.from({ length: 180 }, (_, i) => `line ${i}`).join(
+    "%0A",
+  );
+  await page.setViewportSize({ width: 900, height: 520 });
+  await page.goto(`/?debug=1&debugDelay=0&debugText=${longText}`);
+  await page
+    .getByPlaceholder("Message (empty for assistant-only)")
+    .fill("long answer");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.locator(".message.assistant")).toContainText("line 179");
+
+  const backToTop = page.locator(".composer [data-back-to-top]");
+  await expect(backToTop).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const button = document.querySelector(".composer [data-back-to-top]");
+        const composerBox = document.querySelector(".composer-box");
+        const mobileButton = document.querySelector(
+          ".composer-flow-controls [data-back-to-top]",
+        );
+        if (!button || !composerBox || !mobileButton) return null;
+        const buttonRect = button.getBoundingClientRect();
+        const boxRect = composerBox.getBoundingClientRect();
+        return {
+          desktopBelowPrompt: buttonRect.top >= boxRect.bottom,
+          mobileButtonHidden: getComputedStyle(mobileButton).display === "none",
+        };
+      }),
+    )
+    .toEqual({ desktopBelowPrompt: true, mobileButtonHidden: true });
+
+  await page.locator(".conversation").evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+  });
+  await expect
+    .poll(() => page.locator(".conversation").evaluate((el) => el.scrollTop))
+    .toBeGreaterThan(0);
+  await backToTop.click();
+  await expect
+    .poll(() => page.locator(".conversation").evaluate((el) => el.scrollTop))
+    .toBe(0);
+});
+
 test("user scroll intent disables streaming autoscroll", async ({ page }) => {
   const longText = Array.from({ length: 160 }, (_, i) => `token${i}`).join(
     "%20",

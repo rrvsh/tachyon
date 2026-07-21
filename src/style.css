@@ -737,6 +737,17 @@ pre {
   margin-top: 0.75rem;
 }
 
+.composer-bottom-actions {
+  display: flex;
+  justify-content: flex-start;
+  padding-top: 0.35rem;
+}
+
+.mobile-only,
+.composer-actions .mobile-only {
+  display: none;
+}
+
 .thinking-block {
   border: 1px solid var(--border);
   margin-bottom: 0.75rem;
@@ -1085,6 +1096,15 @@ select:focus {
     align-items: stretch;
     flex-direction: column;
     gap: 0.35rem;
+  }
+
+  .desktop-only {
+    display: none;
+  }
+
+  .mobile-only,
+  .composer-actions .mobile-only {
+    display: inline-flex;
   }
 
   .composer-selects,

@@ -148,6 +148,13 @@ export function bindEvents(app: HTMLElement): void {
     }
     if (target.matches("[data-copy-conversation]"))
       return void copyConversationText(target);
+    if (target.matches("[data-back-to-top]")) {
+      const conversation = app.querySelector<HTMLElement>(".conversation");
+      app.dataset.autoscroll = "false";
+      app.dataset.lastUserScrollAt = String(Date.now());
+      if (conversation) conversation.scrollTop = 0;
+      return;
+    }
     const copy = target.getAttribute("data-copy");
     if (copy) return void copyMessageText(copy, target);
     const edit = target.getAttribute("data-edit");

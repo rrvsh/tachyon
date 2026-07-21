@@ -108,6 +108,32 @@ test("mobile keyboard inset lifts composer above the occluded area", async ({
     .toBe(bottomBefore - 180);
 });
 
+test("mobile back to top stays with flow controls", async ({ page }) => {
+  const longText = Array.from({ length: 120 }, (_, i) => `mobile ${i}`).join(
+    "%0A",
+  );
+  await page.goto(`/?debug=1&debugDelay=0&debugText=${longText}`);
+  await page
+    .getByPlaceholder("Message (empty for assistant-only)")
+    .fill("long mobile answer");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.locator(".message.assistant")).toContainText("mobile 119");
+
+  const mobileBackToTop = page.locator(
+    ".composer-flow-controls [data-back-to-top]",
+  );
+  await expect(mobileBackToTop).toBeVisible();
+  await expect(page.locator(".composer [data-back-to-top]")).toBeHidden();
+  await expect
+    .poll(() =>
+      mobileBackToTop.evaluate((el) => {
+        const rect = el.getBoundingClientRect();
+        return rect.height >= 44;
+      }),
+    )
+    .toBe(true);
+});
+
 test("mobile message controls are reachable and tap-sized", async ({
   page,
 }) => {
