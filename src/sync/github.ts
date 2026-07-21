@@ -170,6 +170,13 @@ function reviewForStorage(review: Awaited<ReturnType<typeof analyzeImport>>) {
 
 export async function runGithubFullSync(): Promise<GithubSyncState> {
   let state = getGithubSyncState();
+  if (typeof navigator !== "undefined" && !navigator.onLine) {
+    return updateGithubSyncState({
+      status: "error",
+      error: "Network is offline. Reconnect before syncing.",
+      autosyncPending: false,
+    });
+  }
   if (!isGithubSyncConfigured(state))
     return updateGithubSyncState({ status: "not configured" });
   if (state.status === "conflict") return state;
@@ -259,6 +266,13 @@ export async function runGithubFullSync(): Promise<GithubSyncState> {
 
 export async function overwriteGithubRemote(): Promise<GithubSyncState> {
   const state = getGithubSyncState();
+  if (typeof navigator !== "undefined" && !navigator.onLine) {
+    return updateGithubSyncState({
+      status: "error",
+      error: "Network is offline. Reconnect before syncing.",
+      autosyncPending: false,
+    });
+  }
   if (!isGithubSyncConfigured(state))
     return updateGithubSyncState({ status: "not configured" });
   const exportText = JSON.stringify(await createExport(), null, 2);

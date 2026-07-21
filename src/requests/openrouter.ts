@@ -4,6 +4,9 @@ import type { Transport } from "./transport";
 export const openRouterTransport: Transport = {
   async stream({ agent, turns, openRouterApiKey, signal }, onDelta) {
     assertValidAgentConfig(agent);
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      throw new Error("Network is offline. Reconnect before sending.");
+    }
     const payload = {
       ...agent.params,
       model: agent.model,
