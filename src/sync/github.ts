@@ -162,12 +162,6 @@ export async function pushRemoteFile(
   return result.content.sha;
 }
 
-function reviewForStorage(review: Awaited<ReturnType<typeof analyzeImport>>) {
-  const { file: _file, ...summary } = review;
-  void _file;
-  return summary;
-}
-
 export async function runGithubFullSync(): Promise<GithubSyncState> {
   let state = getGithubSyncState();
   if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -227,9 +221,9 @@ export async function runGithubFullSync(): Promise<GithubSyncState> {
         remoteSha: remote.sha,
         lastPull: now,
         status: "conflict",
-        conflictSummary: review.summary ?? null,
+        conflictSummary: null,
         pendingImportText: remote.text,
-        pendingImportReview: reviewForStorage(review),
+        pendingImportReview: null,
         autosyncPending: false,
       });
     }

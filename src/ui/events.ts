@@ -24,7 +24,11 @@ import { clearNotice, loadState, notify, sessionIdFromUrl } from "../app/state";
 import { normalizeMessageForDisplay } from "../messages/display";
 import { siblings } from "../messages/tree";
 import { applyFontFamily } from "../settings/settings";
-import { overwriteGithubRemote, runGithubFullSync } from "../sync/github";
+import {
+  fetchRemoteFile,
+  overwriteGithubRemote,
+  runGithubFullSync,
+} from "../sync/github";
 import {
   getGithubSyncState,
   saveGithubSyncState,
@@ -35,6 +39,34 @@ import {
   composerDraftKey,
   writeComposerDraft,
 } from "./drafts";
+
+async function setImportReview(
+  app: HTMLElement,
+  text: string,
+  source: "manual" | "sync",
+): Promise<void> {
+  const review = await analyzeImportJsonText(text);
+  const { file: _file, ...reviewSummary } = review;
+  void _file;
+  app.dataset.importReviewText = text;
+  app.dataset.importReview = JSON.stringify(reviewSummary);
+  app.dataset.importReviewSource = source;
+  delete app.dataset.importResolutions;
+}
+
+async function refreshSyncImportReview(app: HTMLElement): Promise<void> {
+  const syncState = getGithubSyncState();
+  if (syncState.status !== "conflict" || !syncState.pendingImportText) return;
+  await setImportReview(app, syncState.pendingImportText, "sync");
+}
+
+function clearImportReview(app: HTMLElement): void {
+  delete app.dataset.importReview;
+  delete app.dataset.importReviewText;
+  delete app.dataset.importReviewSource;
+  delete app.dataset.importResolutions;
+  delete app.dataset.importActionStatus;
+}
 
 export function bindEvents(app: HTMLElement): void {
   let composerDraftTimer: number | undefined;
@@ -62,6 +94,7 @@ export function bindEvents(app: HTMLElement): void {
     const rightTab = target.getAttribute("data-right-tab");
     if (rightTab) {
       app.dataset.rightSidebarTab = rightTab;
+      if (rightTab === "data") await refreshSyncImportReview(app);
       return refresh();
     }
     if (target.matches("[data-add-param]")) return addExtraParamRow(app);
@@ -99,9 +132,19 @@ export function bindEvents(app: HTMLElement): void {
       return refresh();
     }
     if (target.matches("[data-sync-now]")) {
+      app.dataset.importActionStatus = "syncing";
+      refresh();
       const state = await runGithubFullSync();
       if (state.status === "not configured")
         notify("Configure GitHub repository and token first.", "error");
+      if (state.status === "conflict") await refreshSyncImportReview(app);
+      else if (app.dataset.importReviewSource === "sync")
+        clearImportReview(app);
+      delete app.dataset.importActionStatus;
+      return refresh();
+    }
+    if (target.matches("[data-refresh-import-review]")) {
+      await refreshSyncImportReview(app);
       return refresh();
     }
     const importResolutionButton = target.closest<HTMLElement>(
@@ -130,16 +173,34 @@ export function bindEvents(app: HTMLElement): void {
       return refresh();
     }
     if (target.matches("[data-sync-overwrite]")) {
+      app.dataset.importActionStatus = "merging";
+      refresh();
       await overwriteGithubRemote();
-      delete app.dataset.importReview;
-      delete app.dataset.importReviewText;
-      delete app.dataset.importResolutions;
+      clearImportReview(app);
       return refresh();
     }
     if (target.matches("[data-import-merge]")) {
+      const syncReview = app.dataset.importReviewSource === "sync";
       const syncState = getGithubSyncState();
-      const syncReview = !app.dataset.importReviewText;
-      const text = app.dataset.importReviewText ?? syncState.pendingImportText;
+      let text = app.dataset.importReviewText ?? syncState.pendingImportText;
+      if (syncReview) {
+        const remote = await fetchRemoteFile(syncState.config);
+        if (!remote) {
+          notify(
+            "Remote sync file changed or disappeared. Run sync again.",
+            "error",
+          );
+          return refresh();
+        }
+        text = remote.text;
+        saveGithubSyncState({
+          ...getGithubSyncState(),
+          remoteSha: remote.sha,
+          pendingImportText: remote.text,
+          pendingImportReview: null,
+          conflictSummary: null,
+        });
+      }
       const resolutions = app.dataset.importResolutions
         ? (JSON.parse(app.dataset.importResolutions) as Record<
             string,
@@ -150,52 +211,91 @@ export function bindEvents(app: HTMLElement): void {
         const currentReview = await analyzeImportJsonText(text);
         const storedReview = app.dataset.importReview
           ? JSON.parse(app.dataset.importReview)
-          : syncState.pendingImportReview;
+          : null;
         if (
           JSON.stringify(currentReview.summary) !==
             JSON.stringify(storedReview?.summary) ||
           JSON.stringify(currentReview.records) !==
             JSON.stringify(storedReview?.records)
         ) {
-          const { file: _file, ...reviewSummary } = currentReview;
-          void _file;
-          app.dataset.importReviewText = text;
-          app.dataset.importReview = JSON.stringify(reviewSummary);
-          delete app.dataset.importResolutions;
+          await setImportReview(app, text, syncReview ? "sync" : "manual");
           notify(
-            "Import changed since review. Review the updated diff.",
+            "Import changed since review. Choose decisions against the updated diff.",
             "error",
           );
           return refresh();
         }
+        app.dataset.importActionStatus = "merging";
+        refresh();
         await importJsonText(text, resolutions);
       }
-      delete app.dataset.importReview;
-      delete app.dataset.importReviewText;
-      delete app.dataset.importResolutions;
       if (syncReview) {
         const state = await overwriteGithubRemote();
         if (state.status === "error")
           notify(state.error ?? "Sync failed.", "error");
       }
-      return refresh();
+      app.dataset.importActionStatus = "merged";
+      refresh();
+      window.setTimeout(() => {
+        clearImportReview(app);
+        refresh();
+      }, 700);
+      return;
     }
     if (target.matches("[data-import-replace]")) {
+      const syncReview = app.dataset.importReviewSource === "sync";
       const syncState = getGithubSyncState();
-      const syncReview = !app.dataset.importReviewText;
-      const text = app.dataset.importReviewText ?? syncState.pendingImportText;
-      if (text) await replaceJsonText(text);
-      delete app.dataset.importReview;
-      delete app.dataset.importReviewText;
-      delete app.dataset.importResolutions;
+      let text = app.dataset.importReviewText ?? syncState.pendingImportText;
+      if (syncReview) {
+        const remote = await fetchRemoteFile(syncState.config);
+        if (!remote) {
+          notify(
+            "Remote sync file changed or disappeared. Run sync again.",
+            "error",
+          );
+          return refresh();
+        }
+        text = remote.text;
+        saveGithubSyncState({
+          ...getGithubSyncState(),
+          remoteSha: remote.sha,
+          pendingImportText: remote.text,
+          pendingImportReview: null,
+          conflictSummary: null,
+        });
+      }
+      if (text) {
+        const currentReview = await analyzeImportJsonText(text);
+        const storedReview = app.dataset.importReview
+          ? JSON.parse(app.dataset.importReview)
+          : null;
+        if (
+          JSON.stringify(currentReview.summary) !==
+            JSON.stringify(storedReview?.summary) ||
+          JSON.stringify(currentReview.records) !==
+            JSON.stringify(storedReview?.records)
+        ) {
+          await setImportReview(app, text, syncReview ? "sync" : "manual");
+          notify(
+            "Import changed since review. Check the updated replace impact first.",
+            "error",
+          );
+          return refresh();
+        }
+        app.dataset.importActionStatus = "replacing";
+        refresh();
+        await replaceJsonText(text);
+      }
+      clearImportReview(app);
       if (syncReview)
         saveGithubSyncState({
           ...getGithubSyncState(),
-          status: "local changes",
-          dirtySince: Date.now(),
+          status: "synced",
+          dirtySince: null,
           conflictSummary: null,
           pendingImportText: null,
           pendingImportReview: null,
+          lastSync: Date.now(),
         });
       return refresh();
     }
@@ -368,12 +468,7 @@ export function bindEvents(app: HTMLElement): void {
       const input = target as HTMLInputElement;
       if (input.files?.[0]) {
         const text = await input.files[0].text();
-        const review = await analyzeImportJsonText(text);
-        const { file: _file, ...reviewSummary } = review;
-        void _file;
-        app.dataset.importReviewText = text;
-        app.dataset.importReview = JSON.stringify(reviewSummary);
-        delete app.dataset.importResolutions;
+        await setImportReview(app, text, "manual");
         app.dataset.rightSidebarTab = "data";
         refresh();
       }

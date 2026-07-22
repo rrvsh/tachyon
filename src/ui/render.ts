@@ -926,8 +926,9 @@ function renderSettingsPanel(settings: {
 
 function renderDataPanel(app: HTMLElement): string {
   const sync = getGithubSyncState();
-  const review = parseImportReview(app) ?? sync.pendingImportReview;
+  const review = parseImportReview(app);
   const resolutions = parseImportResolutions(app);
+  const reviewSource = app.dataset.importReviewSource;
   const unresolvedConflicts = countUnresolvedConflicts(review, resolutions);
   const summary =
     review?.valid && review.summary
@@ -937,17 +938,17 @@ function renderDataPanel(app: HTMLElement): string {
     review && !review.valid
       ? `<div class="import-review"><p><strong>cannot import this file</strong></p><p class="error">${esc(review.error ?? "Invalid export file.")}</p></div>`
       : "";
-  const syncReview = !app.dataset.importReview && !!sync.pendingImportReview;
+  const syncReview = reviewSource === "sync";
   const actions = review?.valid
     ? `
       <section class="data-row">
-        <p class="field-help">Merge adds/updates safe records and applies selected conflict decisions.${unresolvedConflicts ? ` Resolve ${unresolvedConflicts} more conflict${unresolvedConflicts === 1 ? "" : "s"} first.` : ""}</p>
-        <button class="left-text-button" data-import-merge ${unresolvedConflicts ? "disabled" : ""}>merge</button>
+        <p class="field-help">Apply safe incoming changes and your conflict decisions.${syncReview ? " Then push the resolved result to GitHub." : ""}${unresolvedConflicts ? ` Choose an action for ${unresolvedConflicts} more conflict${unresolvedConflicts === 1 ? "" : "s"} first.` : ""}</p>
+        <button class="left-text-button" data-import-merge ${unresolvedConflicts ? "disabled" : ""}>${esc(importActionLabel(app, syncReview))}</button>
       </section>
 
       <section class="data-row">
-        <p class="field-help">Replace deletes local records missing from backup, then loads this backup.</p>
-        <button class="left-text-button" data-import-replace>replace</button>
+        <p class="field-help">Delete local records not in the incoming file, then load the incoming file exactly.</p>
+        <button class="left-text-button" data-import-replace>${esc(app.dataset.importActionStatus === "replacing" ? "replacing..." : "replace local data")}</button>
       </section>
 
       ${
@@ -962,9 +963,8 @@ function renderDataPanel(app: HTMLElement): string {
       }
     `
     : "";
-  const conflict = sync.conflictSummary
-    ? renderSyncConflictSummary(sync.conflictSummary)
-    : "";
+  const conflict =
+    sync.status === "conflict" ? renderSyncConflictSummary() : "";
   const syncStatus = sync.error ? `${sync.status}: ${sync.error}` : sync.status;
   return `
     <section class="right-panel">
@@ -978,7 +978,7 @@ function renderDataPanel(app: HTMLElement): string {
           ${conflict}
         </div>
         <div class="data-row-actions">
-          <button class="left-text-button" data-sync-now>sync</button>
+          <button class="left-text-button" data-sync-now>${esc(app.dataset.importActionStatus === "syncing" ? "syncing..." : "sync")}</button>
         </div>
       </section>
 
@@ -988,13 +988,14 @@ function renderDataPanel(app: HTMLElement): string {
       </section>
 
       <section class="data-row">
-        <p class="field-help">Upload a Tachyon backup.</p>
+        <p class="field-help">Upload a Tachyon backup. Tachyon recalculates this review from current local data before every merge.</p>
         <label class="left-text-button import-button">
           choose file
           <input data-action="import" type="file" accept="application/json">
         </label>
       </section>
 
+      ${sync.status === "conflict" && !review ? `<div class="import-review"><p><strong>sync conflict</strong></p><p class="field-help">Conflict details are derived on demand from current local data and the pending remote file.</p><button class="left-text-button" data-refresh-import-review>recalculate review</button></div>` : ""}
       ${error}
       ${summary}
       ${actions}
@@ -1006,18 +1007,16 @@ function formatTime(value: number | null): string {
   return value ? new Date(value).toLocaleString() : "never";
 }
 
-function renderSyncConflictSummary(
-  summary: NonNullable<
-    ReturnType<typeof getGithubSyncState>["conflictSummary"]
-  >,
-): string {
-  const rows = ["sessions", "messages", "agents"]
-    .map(
-      (key) =>
-        `<p class="field-help">${esc(key)} ${summary[key as keyof typeof summary]?.quarantined ?? 0}</p>`,
-    )
-    .join("");
-  return `<div class="sync-conflicts"><p><strong>conflicts</strong></p>${rows}</div>`;
+function importActionLabel(app: HTMLElement, syncReview: boolean): string {
+  const status = app.dataset.importActionStatus;
+  if (status === "merging")
+    return syncReview ? "merging and pushing..." : "merging...";
+  if (status === "merged") return syncReview ? "merged and pushed!" : "merged!";
+  return syncReview ? "apply decisions and push" : "apply selected merge";
+}
+
+function renderSyncConflictSummary(): string {
+  return `<div class="sync-conflicts"><p><strong>conflicts need review</strong></p><p class="field-help">Tachyon recalculates conflict details from the remote file and current local data before applying decisions.</p></div>`;
 }
 
 interface ParsedImportReview {
@@ -1105,14 +1104,15 @@ function renderImportSummary(
       return `<tr><th scope="row">${esc(key)}</th><td>${bucket.added}</td><td>${bucket.changed}</td><td>${bucket.removedOnReplace}</td><td>${bucket.quarantined}</td></tr>`;
     })
     .join("");
+  const unresolvedConflicts = countUnresolvedConflicts(review, resolutions);
   const reasons = review.quarantineReasons?.length
-    ? `<details class="archive-panel" open><summary>quarantine</summary><ul>${review.quarantineReasons.map((reason) => `<li>${esc(reason)}</li>`).join("")}</ul></details>`
+    ? `<details class="archive-panel" ${unresolvedConflicts ? "open" : ""}><summary>${unresolvedConflicts ? "needs decisions" : "resolved conflict reasons"}</summary><ul>${review.quarantineReasons.map((reason) => `<li>${esc(reason)}</li>`).join("")}</ul></details>`
     : "";
   const exportedAt = review.exportedAt
     ? `<p class="import-exported-at">file exported at: ${esc(new Date(review.exportedAt).toLocaleString())}</p>`
     : "";
   const details = renderImportRecordDiffs(review, resolutions);
-  return `<div class="import-review"><p><strong>import preview</strong></p>${exportedAt}<table class="import-diff-table"><thead><tr><th></th><th>add</th><th>update</th><th>delete on replace*</th><th>conflicts</th></tr></thead><tbody>${rows}</tbody></table><div class="field-help import-definitions"><p>add: new records from backup.</p><p>update: existing records changed by backup.</p><p>delete on replace*: local records missing from backup; deleted only by replace.</p><p>conflicts: choose keep local, use incoming, or skip before merge.</p></div>${details}${reasons}</div>`;
+  return `<div class="import-review"><p><strong>import preview</strong></p>${exportedAt}<table class="import-diff-table"><thead><tr><th></th><th>add</th><th>update</th><th>delete on replace*</th><th>needs decision</th></tr></thead><tbody>${rows}</tbody></table><div class="field-help import-definitions"><p>add: incoming records that do not exist locally.</p><p>update: incoming records Tachyon can merge safely.</p><p>delete on replace*: local records missing from the incoming file; only deleted by replace local data.</p><p>needs decision: conflicting records. Choose keep local, use incoming, or skip before applying the merge.</p></div>${details}${reasons}</div>`;
 }
 
 function renderImportRecordDiffs(
@@ -1129,6 +1129,14 @@ function renderImportRecordDiffs(
       return `<details class="archive-panel import-records" ${records.some((record) => record.status === "conflict") ? "open" : ""}><summary>${esc(key)} changes</summary>${records.map((record) => renderImportRecordDiff(record, resolutions)).join("")}</details>`;
     })
     .join("");
+}
+
+function importStatusLabel(status: string): string {
+  if (status === "add") return "will add";
+  if (status === "update") return "will update";
+  if (status === "delete on replace") return "replace would delete";
+  if (status === "conflict") return "needs decision";
+  return status;
 }
 
 function renderImportRecordDiff(
@@ -1155,7 +1163,7 @@ function renderImportRecordDiff(
   const reason = record.reason
     ? `<p class="${resolution ? "field-help" : "error"}">reason: ${esc(record.reason)}</p>`
     : "";
-  return `<details class="import-record ${record.status === "conflict" && !resolution ? "import-record-conflict" : ""}" ${record.status === "conflict" ? "open" : ""}><summary><span>${esc(resolution ? "resolved" : record.status)}</span> <strong>${esc(record.label)}</strong></summary><p class="field-help">id: ${esc(record.id)}${record.updatedAt ? ` · updated: ${esc(formatTime(record.updatedAt))}` : ""}</p>${reason}${fieldRows}${actions}${resolved}</details>`;
+  return `<details class="import-record ${record.status === "conflict" && !resolution ? "import-record-conflict" : ""}" ${record.status === "conflict" ? "open" : ""}><summary><span>${esc(resolution ? "resolved" : importStatusLabel(record.status))}</span> <strong>${esc(record.label)}</strong></summary><p class="field-help">id: ${esc(record.id)}${record.updatedAt ? ` · updated: ${esc(formatTime(record.updatedAt))}` : ""}</p>${reason}${fieldRows}${actions}${resolved}</details>`;
 }
 
 function renderImportFieldDiff(field: {
