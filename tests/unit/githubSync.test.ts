@@ -1,5 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
-import { fetchRemoteFile } from "../../src/sync/github";
+import "fake-indexeddb/auto";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { clearDbForTests } from "../../src/data/db";
+import { fetchRemoteFile, overwriteGithubRemote } from "../../src/sync/github";
+import {
+  defaultGithubSyncState,
+  saveGithubSyncState,
+} from "../../src/sync/state";
 import type { GithubSyncConfig } from "../../src/sync/state";
 
 const config: GithubSyncConfig = {
@@ -21,6 +27,11 @@ function mockJsonResponse(value: unknown, ok = true, status = 200) {
 }
 
 describe("github sync remote fetch", () => {
+  beforeEach(async () => {
+    await clearDbForTests();
+    localStorage.clear();
+    vi.unstubAllGlobals();
+  });
   it("accepts an empty remote file as file content", async () => {
     vi.stubGlobal(
       "fetch",
@@ -71,5 +82,79 @@ describe("github sync remote fetch", () => {
     );
 
     vi.unstubAllGlobals();
+  });
+
+  it("overwrites using the current remote sha instead of stored state", async () => {
+    saveGithubSyncState({
+      ...defaultGithubSyncState(),
+      config,
+      remoteSha: "stale-sha",
+      status: "local changes",
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        mockJsonResponse({
+          content: "e30=",
+          encoding: "base64",
+          sha: "current-sha",
+        }),
+      )
+      .mockResolvedValueOnce(mockJsonResponse({ content: { sha: "new-sha" } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(overwriteGithubRemote()).resolves.toMatchObject({
+      remoteSha: "new-sha",
+      status: "synced",
+    });
+    const putBody = JSON.parse(String(fetchMock.mock.calls[1][1]?.body));
+    expect(putBody.sha).toBe("current-sha");
+  });
+
+  it("retries remote overwrite once after a sha mismatch", async () => {
+    saveGithubSyncState({
+      ...defaultGithubSyncState(),
+      config,
+      remoteSha: "stale-sha",
+      status: "local changes",
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        mockJsonResponse({
+          content: "e30=",
+          encoding: "base64",
+          sha: "sha-one",
+        }),
+      )
+      .mockResolvedValueOnce(
+        mockJsonResponse(
+          { message: "tachyon-sync.json does not match" },
+          false,
+          409,
+        ),
+      )
+      .mockResolvedValueOnce(
+        mockJsonResponse({
+          content: "e30=",
+          encoding: "base64",
+          sha: "sha-two",
+        }),
+      )
+      .mockResolvedValueOnce(
+        mockJsonResponse({ content: { sha: "sha-three" } }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(overwriteGithubRemote()).resolves.toMatchObject({
+      remoteSha: "sha-three",
+      status: "synced",
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body)).sha).toBe(
+      "sha-one",
+    );
+    expect(JSON.parse(String(fetchMock.mock.calls[3][1]?.body)).sha).toBe(
+      "sha-two",
+    );
   });
 });

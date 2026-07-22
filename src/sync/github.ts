@@ -47,6 +47,10 @@ function decodeBase64(value: string): string {
   return new TextDecoder().decode(bytes);
 }
 
+export function isGithubShaMismatch(error: unknown): boolean {
+  return error instanceof Error && /GitHub 409:/.test(error.message);
+}
+
 async function githubFetch<T>(
   config: GithubSyncConfig,
   url: string,
@@ -162,7 +166,9 @@ export async function pushRemoteFile(
   return result.content.sha;
 }
 
-export async function runGithubFullSync(): Promise<GithubSyncState> {
+export async function runGithubFullSync(
+  retryOnShaMismatch = true,
+): Promise<GithubSyncState> {
   let state = getGithubSyncState();
   if (typeof navigator !== "undefined" && !navigator.onLine) {
     return updateGithubSyncState({
@@ -230,7 +236,12 @@ export async function runGithubFullSync(): Promise<GithubSyncState> {
 
     await importFile(parsed);
     const exportText = JSON.stringify(await createExport(), null, 2);
-    const sha = await pushRemoteFile(state.config, exportText, remote.sha);
+    const latestRemote = await fetchRemoteFile(state.config);
+    const sha = await pushRemoteFile(
+      state.config,
+      exportText,
+      latestRemote?.sha ?? null,
+    );
     const done = Date.now();
     return updateGithubSyncState({
       remoteSha: sha,
@@ -246,6 +257,12 @@ export async function runGithubFullSync(): Promise<GithubSyncState> {
       autosyncPending: false,
     });
   } catch (error) {
+    if (retryOnShaMismatch && isGithubShaMismatch(error)) {
+      (
+        window as unknown as { __tachyonSyncRunning?: boolean }
+      ).__tachyonSyncRunning = false;
+      return runGithubFullSync(false);
+    }
     return updateGithubSyncState({
       status: "error",
       error: error instanceof Error ? error.message : String(error),
@@ -258,7 +275,9 @@ export async function runGithubFullSync(): Promise<GithubSyncState> {
   }
 }
 
-export async function overwriteGithubRemote(): Promise<GithubSyncState> {
+export async function overwriteGithubRemote(
+  retryOnShaMismatch = true,
+): Promise<GithubSyncState> {
   const state = getGithubSyncState();
   if (typeof navigator !== "undefined" && !navigator.onLine) {
     return updateGithubSyncState({
@@ -269,21 +288,36 @@ export async function overwriteGithubRemote(): Promise<GithubSyncState> {
   }
   if (!isGithubSyncConfigured(state))
     return updateGithubSyncState({ status: "not configured" });
-  const exportText = JSON.stringify(await createExport(), null, 2);
-  const sha = await pushRemoteFile(state.config, exportText, state.remoteSha);
-  const now = Date.now();
-  return updateGithubSyncState({
-    remoteSha: sha,
-    dirtySince: null,
-    lastPush: now,
-    lastSync: now,
-    status: "synced",
-    error: null,
-    conflictSummary: null,
-    pendingImportText: null,
-    pendingImportReview: null,
-    autosyncPending: false,
-  });
+  try {
+    const currentRemote = await fetchRemoteFile(state.config);
+    const exportText = JSON.stringify(await createExport(), null, 2);
+    const sha = await pushRemoteFile(
+      state.config,
+      exportText,
+      currentRemote?.sha ?? null,
+    );
+    const now = Date.now();
+    return updateGithubSyncState({
+      remoteSha: sha,
+      dirtySince: null,
+      lastPush: now,
+      lastSync: now,
+      status: "synced",
+      error: null,
+      conflictSummary: null,
+      pendingImportText: null,
+      pendingImportReview: null,
+      autosyncPending: false,
+    });
+  } catch (error) {
+    if (retryOnShaMismatch && isGithubShaMismatch(error))
+      return overwriteGithubRemote(false);
+    return updateGithubSyncState({
+      status: "error",
+      error: error instanceof Error ? error.message : String(error),
+      autosyncPending: false,
+    });
+  }
 }
 
 export async function maybeRunPendingGithubSync(): Promise<boolean> {

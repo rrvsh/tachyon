@@ -181,11 +181,6 @@ export function bindEvents(app: HTMLElement): void {
         delete app.dataset.importActionStatus;
         return refresh();
       }
-      const remote = await fetchRemoteFile(current.config);
-      saveGithubSyncState({
-        ...getGithubSyncState(),
-        remoteSha: remote?.sha ?? null,
-      });
       const state = await overwriteGithubRemote();
       if (state.status === "error")
         notify(state.error ?? "Sync failed.", "error");
