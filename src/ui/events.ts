@@ -104,19 +104,68 @@ export function bindEvents(app: HTMLElement): void {
         notify("Configure GitHub repository and token first.", "error");
       return refresh();
     }
+    const conflictKey = target.getAttribute("data-import-conflict");
+    const resolution = target.getAttribute("data-import-resolution");
+    if (conflictKey && resolution) {
+      let resolutions: Record<string, string> = {};
+      try {
+        resolutions = app.dataset.importResolutions
+          ? (JSON.parse(app.dataset.importResolutions) as Record<
+              string,
+              string
+            >)
+          : {};
+      } catch {
+        resolutions = {};
+      }
+      resolutions[conflictKey] = resolution;
+      app.dataset.importResolutions = JSON.stringify(resolutions);
+      return refresh();
+    }
     if (target.matches("[data-sync-overwrite]")) {
       await overwriteGithubRemote();
       delete app.dataset.importReview;
       delete app.dataset.importReviewText;
+      delete app.dataset.importResolutions;
       return refresh();
     }
     if (target.matches("[data-import-merge]")) {
       const syncState = getGithubSyncState();
       const syncReview = !app.dataset.importReviewText;
       const text = app.dataset.importReviewText ?? syncState.pendingImportText;
-      if (text) await importJsonText(text);
+      const resolutions = app.dataset.importResolutions
+        ? (JSON.parse(app.dataset.importResolutions) as Record<
+            string,
+            "local" | "incoming" | "skip"
+          >)
+        : {};
+      if (text) {
+        const currentReview = await analyzeImportJsonText(text);
+        const storedReview = app.dataset.importReview
+          ? JSON.parse(app.dataset.importReview)
+          : syncState.pendingImportReview;
+        if (
+          JSON.stringify(currentReview.summary) !==
+            JSON.stringify(storedReview?.summary) ||
+          JSON.stringify(currentReview.records) !==
+            JSON.stringify(storedReview?.records)
+        ) {
+          const { file: _file, ...reviewSummary } = currentReview;
+          void _file;
+          app.dataset.importReviewText = text;
+          app.dataset.importReview = JSON.stringify(reviewSummary);
+          delete app.dataset.importResolutions;
+          notify(
+            "Import changed since review. Review the updated diff.",
+            "error",
+          );
+          return refresh();
+        }
+        await importJsonText(text, resolutions);
+      }
       delete app.dataset.importReview;
       delete app.dataset.importReviewText;
+      delete app.dataset.importResolutions;
       if (syncReview)
         saveGithubSyncState({
           ...getGithubSyncState(),
@@ -135,6 +184,7 @@ export function bindEvents(app: HTMLElement): void {
       if (text) await replaceJsonText(text);
       delete app.dataset.importReview;
       delete app.dataset.importReviewText;
+      delete app.dataset.importResolutions;
       if (syncReview)
         saveGithubSyncState({
           ...getGithubSyncState(),
@@ -320,6 +370,7 @@ export function bindEvents(app: HTMLElement): void {
         void _file;
         app.dataset.importReviewText = text;
         app.dataset.importReview = JSON.stringify(reviewSummary);
+        delete app.dataset.importResolutions;
         app.dataset.rightSidebarTab = "data";
         refresh();
       }

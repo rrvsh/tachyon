@@ -1,7 +1,11 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { clearDbForTests, putOne, snapshot } from "../../src/data/db";
-import { createExport, importFile } from "../../src/data/importExport";
+import {
+  analyzeImport,
+  createExport,
+  importFile,
+} from "../../src/data/importExport";
 import type { MessageRecord, SessionRecord } from "../../src/data/schema";
 
 describe("import/export", () => {
@@ -67,6 +71,37 @@ describe("import/export", () => {
     expect(snap.quarantined).toHaveLength(0);
   });
 
+  it("reports field-level conflict diffs for stable-ID conflicts", async () => {
+    const s: SessionRecord = {
+      id: "abcdefgh",
+      title: "a",
+      createdAt: 1,
+      updatedAt: 2,
+      archived: false,
+      rootMessageId: null,
+    };
+    await putOne("sessions", s);
+    const review = await analyzeImport({
+      version: 1,
+      exportedAt: 3,
+      sessions: [{ ...s, title: "b", updatedAt: 3 }],
+      messages: [],
+      agents: [],
+    });
+    expect(review.summary?.sessions.quarantined).toBe(1);
+    expect(review.records?.sessions[0]).toMatchObject({
+      id: "abcdefgh",
+      status: "conflict",
+      label: "b",
+      reason: "Conflicting stable ID record",
+    });
+    expect(review.records?.sessions[0].fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ field: "title", local: "a", incoming: "b" }),
+      ]),
+    );
+  });
+
   it("quarantines stable-ID conflicts instead of overwriting newer incoming records", async () => {
     const s: SessionRecord = {
       id: "abcdefgh",
@@ -87,6 +122,55 @@ describe("import/export", () => {
     const snap = await snapshot();
     expect(snap.sessions[0].title).toBe("a");
     expect(snap.quarantined).toHaveLength(1);
+  });
+
+  it("applies explicit incoming conflict resolutions during merge", async () => {
+    const s: SessionRecord = {
+      id: "abcdefgh",
+      title: "a",
+      createdAt: 1,
+      updatedAt: 2,
+      archived: false,
+      rootMessageId: null,
+    };
+    await putOne("sessions", s);
+    await importFile(
+      {
+        version: 1,
+        exportedAt: 3,
+        sessions: [{ ...s, title: "b", updatedAt: 3 }],
+        messages: [],
+        agents: [],
+      },
+      { "sessions:abcdefgh": "incoming" },
+    );
+    const snap = await snapshot();
+    expect(snap.sessions[0].title).toBe("b");
+    expect(snap.quarantined).toHaveLength(0);
+  });
+
+  it("skips broken references when explicitly resolved to skip", async () => {
+    const session: SessionRecord = {
+      id: "imports1",
+      title: "bad refs",
+      createdAt: 1,
+      updatedAt: 1,
+      archived: false,
+      rootMessageId: "notroot",
+    };
+    await importFile(
+      {
+        version: 1,
+        exportedAt: 3,
+        sessions: [session],
+        messages: [],
+        agents: [],
+      },
+      { "sessions:imports1": "skip" },
+    );
+    const snap = await snapshot();
+    expect(snap.sessions).toHaveLength(0);
+    expect(snap.quarantined).toHaveLength(0);
   });
 
   it("quarantines broken session root and message parent references", async () => {

@@ -372,6 +372,61 @@ h2 {
   font-weight: 400;
 }
 
+.import-records,
+.import-record,
+.import-field-diff {
+  margin-top: 0.5rem;
+}
+
+.import-record {
+  border-left: 1px solid var(--border);
+  padding-left: 0.5rem;
+}
+
+.import-record-conflict {
+  border-left-color: var(--error);
+}
+
+.import-field-table {
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  margin-top: 0.35rem;
+  width: 100%;
+}
+
+.import-field-table th,
+.import-field-table td {
+  border-top: 1px solid var(--border);
+  padding: 0.25rem;
+  text-align: left;
+  vertical-align: top;
+  word-break: break-word;
+}
+
+.import-field-diff pre {
+  border-top: 1px solid var(--border);
+  margin: 0.35rem 0 0;
+  overflow: auto;
+  padding-top: 0.35rem;
+  white-space: pre-wrap;
+}
+
+.diff-local,
+.diff-incoming {
+  color: var(--muted);
+}
+
+.import-conflict-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.left-text-button.selected {
+  color: var(--accent);
+}
+
 .agent-fields-section {
   border-top: 1px solid var(--border);
   margin-top: 1rem;

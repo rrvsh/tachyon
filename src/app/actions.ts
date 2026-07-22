@@ -272,8 +272,11 @@ export async function analyzeImportJsonText(text: string) {
   }
 }
 
-export async function importJsonText(text: string): Promise<void> {
-  const result = await importFile(JSON.parse(text));
+export async function importJsonText(
+  text: string,
+  resolutions: Record<string, "local" | "incoming" | "skip"> = {},
+): Promise<void> {
+  const result = await importFile(JSON.parse(text), resolutions);
   notify(`Imported ${result.imported}, quarantined ${result.quarantined}.`);
 }
 

@@ -74,21 +74,26 @@ async function mergeOne<T extends { id: string; updatedAt: number }>(
   incoming: T,
   validate: (v: unknown) => boolean,
   referenceError?: string | null,
+  resolution?: ImportConflictResolution,
 ): Promise<{ record?: T; quarantine?: QuarantineRecord }> {
   const kind = store.slice(0, -1) as QuarantineRecord["kind"];
   if (!validate(incoming))
     return {
       quarantine: quarantine(kind, incoming, "Validation failed"),
     };
-  if (referenceError)
+  if (referenceError) {
+    if (resolution === "local" || resolution === "skip") return {};
     return {
       quarantine: quarantine(kind, incoming, referenceError),
     };
+  }
   const existing = await getOne<T>(store, incoming.id);
   if (!existing) return { record: incoming };
   if (recordsEqual(existing, incoming)) return {};
   const merged = mergeNonConflicting(store, existing, incoming);
   if (merged) return recordsEqual(existing, merged) ? {} : { record: merged };
+  if (resolution === "incoming") return { record: incoming };
+  if (resolution === "local" || resolution === "skip") return {};
   return {
     quarantine: quarantine(kind, incoming, "Conflicting stable ID record"),
   };
@@ -157,12 +162,39 @@ export interface ImportDiffBucket {
   quarantined: number;
 }
 
+export type ImportRecordStatus =
+  "add" | "update" | "unchanged" | "delete on replace" | "conflict";
+
+export interface ImportFieldDiff {
+  field: string;
+  local: string;
+  incoming: string;
+  text: boolean;
+}
+
+export interface ImportRecordDiff {
+  store: "sessions" | "messages" | "agents";
+  id: string;
+  status: ImportRecordStatus;
+  label: string;
+  updatedAt?: number;
+  reason?: string;
+  fields: ImportFieldDiff[];
+}
+
+export type ImportConflictResolution = "local" | "incoming" | "skip";
+export type ImportConflictResolutions = Record<
+  string,
+  ImportConflictResolution
+>;
+
 export interface ImportAnalysis {
   valid: boolean;
   error?: string;
   exportedAt?: number;
   summary?: Record<"sessions" | "messages" | "agents", ImportDiffBucket>;
   quarantineReasons: string[];
+  records?: Record<"sessions" | "messages" | "agents", ImportRecordDiff[]>;
   file?: ExportFile;
 }
 
@@ -191,6 +223,131 @@ function countDiff<T extends { id: string }>(
   for (const id of existing.keys())
     if (!incomingIds.has(id)) bucket.removedOnReplace += 1;
   return bucket;
+}
+
+function stringifyValue(value: unknown): string {
+  if (value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean" || value === null)
+    return String(value);
+  return JSON.stringify(value, null, 2);
+}
+
+function labelRecord(
+  store: "sessions" | "messages" | "agents",
+  record: SessionRecord | MessageRecord | AgentRecord,
+): string {
+  if (store === "sessions") return (record as SessionRecord).title || record.id;
+  if (store === "agents") return (record as AgentRecord).name || record.id;
+  const message = record as MessageRecord;
+  const snippet = message.content.replace(/\s+/g, " ").trim().slice(0, 80);
+  return `${message.role}: ${snippet || message.id}`;
+}
+
+function isTextField(store: string, field: string): boolean {
+  return (
+    (store === "messages" && (field === "content" || field === "reasoning")) ||
+    (store === "agents" && field === "systemPrompt")
+  );
+}
+
+function fieldDiffs(
+  store: "sessions" | "messages" | "agents",
+  local: Record<string, unknown> | null,
+  incoming: Record<string, unknown> | null,
+): ImportFieldDiff[] {
+  const keys = new Set([
+    ...Object.keys(local ?? {}),
+    ...Object.keys(incoming ?? {}),
+  ]);
+  return [...keys]
+    .filter((field) => !recordsEqual(local?.[field], incoming?.[field]))
+    .map((field) => ({
+      field,
+      local: stringifyValue(local?.[field]),
+      incoming: stringifyValue(incoming?.[field]),
+      text: isTextField(store, field),
+    }));
+}
+
+function conflictKey(
+  store: "sessions" | "messages" | "agents",
+  id: string,
+): string {
+  return `${store}:${id}`;
+}
+
+function recordDiff<T extends { id: string; updatedAt?: number }>(
+  store: "sessions" | "messages" | "agents",
+  status: ImportRecordStatus,
+  record: T,
+  local: T | null,
+  incoming: T | null,
+  reason?: string,
+): ImportRecordDiff {
+  return {
+    store,
+    id: record.id,
+    status,
+    label: labelRecord(
+      store,
+      record as unknown as SessionRecord | MessageRecord | AgentRecord,
+    ),
+    updatedAt: record.updatedAt,
+    reason,
+    fields: fieldDiffs(
+      store,
+      local as Record<string, unknown> | null,
+      incoming as Record<string, unknown> | null,
+    ),
+  };
+}
+
+function analyzeRecords<T extends { id: string; updatedAt: number }>(
+  store: "sessions" | "messages" | "agents",
+  incoming: T[],
+  existing: Map<string, T>,
+  referenceReasons = new Map<string, string>(),
+): ImportRecordDiff[] {
+  const rows: ImportRecordDiff[] = [];
+  const incomingIds = new Set(incoming.map((record) => record.id));
+  for (const record of incoming) {
+    const current = existing.get(record.id) ?? null;
+    const reason = referenceReasons.get(record.id);
+    if (!current) {
+      rows.push(
+        recordDiff(
+          store,
+          reason ? "conflict" : "add",
+          record,
+          null,
+          record,
+          reason,
+        ),
+      );
+      continue;
+    }
+    if (recordsEqual(current, record)) {
+      rows.push(recordDiff(store, "unchanged", record, current, record));
+      continue;
+    }
+    const merged = reason ? null : mergeNonConflicting(store, current, record);
+    rows.push(
+      recordDiff(
+        store,
+        merged ? "update" : "conflict",
+        record,
+        current,
+        record,
+        reason ?? (merged ? undefined : "Conflicting stable ID record"),
+      ),
+    );
+  }
+  for (const current of existing.values()) {
+    if (!incomingIds.has(current.id))
+      rows.push(recordDiff(store, "delete on replace", current, current, null));
+  }
+  return rows;
 }
 
 export async function analyzeImport(value: unknown): Promise<ImportAnalysis> {
@@ -259,6 +416,21 @@ export async function analyzeImport(value: unknown): Promise<ImportAnalysis> {
     exportedAt: value.exportedAt,
     summary,
     quarantineReasons,
+    records: {
+      sessions: analyzeRecords(
+        "sessions",
+        value.sessions,
+        existing.sessions,
+        refs.sessions,
+      ),
+      messages: analyzeRecords(
+        "messages",
+        value.messages,
+        existing.messages,
+        refs.messages,
+      ),
+      agents: analyzeRecords("agents", value.agents, existing.agents),
+    },
     file: value,
   };
 }
@@ -280,6 +452,7 @@ export async function replaceImport(
 
 export async function importFile(
   value: unknown,
+  resolutions: ImportConflictResolutions = {},
 ): Promise<{ imported: number; quarantined: number }> {
   if (!validateExportFile(value)) throw new Error("Invalid export file.");
   const refs = referenceErrors(value, await existingMaps());
@@ -293,6 +466,7 @@ export async function importFile(
       s,
       validateSession,
       refs.sessions.get(s.id),
+      resolutions[conflictKey("sessions", s.id)],
     );
     if (r.record) sessions.push(r.record);
     if (r.quarantine) quarantined.push(r.quarantine);
@@ -303,12 +477,19 @@ export async function importFile(
       m,
       validateMessage,
       refs.messages.get(m.id),
+      resolutions[conflictKey("messages", m.id)],
     );
     if (r.record) messages.push(r.record);
     if (r.quarantine) quarantined.push(r.quarantine);
   }
   for (const a of value.agents) {
-    const r = await mergeOne("agents", a, validateAgent);
+    const r = await mergeOne(
+      "agents",
+      a,
+      validateAgent,
+      undefined,
+      resolutions[conflictKey("agents", a.id)],
+    );
     if (r.record) agents.push(r.record);
     if (r.quarantine) quarantined.push(r.quarantine);
   }

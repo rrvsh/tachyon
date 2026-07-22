@@ -927,8 +927,11 @@ function renderSettingsPanel(settings: {
 function renderDataPanel(app: HTMLElement): string {
   const sync = getGithubSyncState();
   const review = parseImportReview(app) ?? sync.pendingImportReview;
+  const resolutions = parseImportResolutions(app);
   const summary =
-    review?.valid && review.summary ? renderImportSummary(review) : "";
+    review?.valid && review.summary
+      ? renderImportSummary(review, resolutions)
+      : "";
   const error =
     review && !review.valid
       ? `<div class="import-review"><p><strong>cannot import this file</strong></p><p class="error">${esc(review.error ?? "Invalid export file.")}</p></div>`
@@ -937,8 +940,8 @@ function renderDataPanel(app: HTMLElement): string {
   const actions = review?.valid
     ? `
       <section class="data-row">
-        <p class="field-help">Merge adds/updates safe records and skips conflicts.</p>
-        <button class="left-text-button" data-import-merge>merge</button>
+        <p class="field-help">Merge adds/updates safe records and applies selected conflict decisions.</p>
+        <button class="left-text-button" data-import-merge ${hasUnresolvedConflicts(review, resolutions) ? "disabled" : ""}>merge</button>
       </section>
 
       <section class="data-row">
@@ -1016,7 +1019,7 @@ function renderSyncConflictSummary(
   return `<div class="sync-conflicts"><p><strong>conflicts</strong></p>${rows}</div>`;
 }
 
-function parseImportReview(app: HTMLElement): {
+interface ParsedImportReview {
   valid: boolean;
   error?: string;
   exportedAt?: number;
@@ -1031,44 +1034,69 @@ function parseImportReview(app: HTMLElement): {
     }
   >;
   quarantineReasons?: string[];
-} | null {
+  records?: Record<
+    string,
+    Array<{
+      store: string;
+      id: string;
+      status: string;
+      label: string;
+      updatedAt?: number;
+      reason?: string;
+      fields: Array<{
+        field: string;
+        local: string;
+        incoming: string;
+        text: boolean;
+      }>;
+    }>
+  >;
+}
+
+function parseImportReview(app: HTMLElement): ParsedImportReview | null {
   if (!app.dataset.importReview) return null;
   try {
-    return JSON.parse(app.dataset.importReview) as {
-      valid: boolean;
-      error?: string;
-      exportedAt?: number;
-      summary?: Record<
-        string,
-        {
-          added: number;
-          changed: number;
-          unchanged: number;
-          removedOnReplace: number;
-          quarantined: number;
-        }
-      >;
-      quarantineReasons?: string[];
-    };
+    return JSON.parse(app.dataset.importReview) as ParsedImportReview;
   } catch {
     return null;
   }
 }
 
-function renderImportSummary(review: {
-  summary?: Record<
-    string,
-    {
-      added: number;
-      changed: number;
-      unchanged: number;
-      removedOnReplace: number;
-      quarantined: number;
-    }
-  >;
-  quarantineReasons?: string[];
-  exportedAt?: number;
-}): string {
+function parseImportResolutions(app: HTMLElement): Record<string, string> {
+  if (!app.dataset.importResolutions) return {};
+  try {
+    const parsed = JSON.parse(app.dataset.importResolutions) as Record<
+      string,
+      string
+    >;
+    return Object.fromEntries(
+      Object.entries(parsed).filter(([, value]) =>
+        ["local", "incoming", "skip"].includes(value),
+      ),
+    );
+  } catch {
+    return {};
+  }
+}
+
+function hasUnresolvedConflicts(
+  review: ParsedImportReview | null,
+  resolutions: Record<string, string>,
+): boolean {
+  if (!review?.records) return false;
+  return Object.values(review.records)
+    .flat()
+    .some(
+      (record) =>
+        record.status === "conflict" &&
+        !resolutions[`${record.store}:${record.id}`],
+    );
+}
+
+function renderImportSummary(
+  review: ParsedImportReview,
+  resolutions: Record<string, string>,
+): string {
   const rows = ["sessions", "messages", "agents"]
     .map((key) => {
       const bucket = review.summary?.[key];
@@ -1082,7 +1110,59 @@ function renderImportSummary(review: {
   const exportedAt = review.exportedAt
     ? `<p class="import-exported-at">file exported at: ${esc(new Date(review.exportedAt).toLocaleString())}</p>`
     : "";
-  return `<div class="import-review"><p><strong>import preview</strong></p>${exportedAt}<table class="import-diff-table"><thead><tr><th></th><th>add</th><th>update</th><th>delete on replace*</th><th>conflicts</th></tr></thead><tbody>${rows}</tbody></table><div class="field-help import-definitions"><p>add: new records from backup.</p><p>update: existing records changed by backup.</p><p>delete on replace*: local records missing from backup; deleted only by replace.</p><p>conflicts: unsafe/conflicting records; skipped silently on merge.</p></div>${reasons}</div>`;
+  const details = renderImportRecordDiffs(review, resolutions);
+  return `<div class="import-review"><p><strong>import preview</strong></p>${exportedAt}<table class="import-diff-table"><thead><tr><th></th><th>add</th><th>update</th><th>delete on replace*</th><th>conflicts</th></tr></thead><tbody>${rows}</tbody></table><div class="field-help import-definitions"><p>add: new records from backup.</p><p>update: existing records changed by backup.</p><p>delete on replace*: local records missing from backup; deleted only by replace.</p><p>conflicts: choose keep local, use incoming, or skip before merge.</p></div>${details}${reasons}</div>`;
+}
+
+function renderImportRecordDiffs(
+  review: ParsedImportReview,
+  resolutions: Record<string, string>,
+): string {
+  if (!review.records) return "";
+  return ["sessions", "messages", "agents"]
+    .map((key) => {
+      const records = (review.records?.[key] ?? []).filter(
+        (record) => record.status !== "unchanged",
+      );
+      if (!records.length) return "";
+      return `<details class="archive-panel import-records" ${records.some((record) => record.status === "conflict") ? "open" : ""}><summary>${esc(key)} changes</summary>${records.map((record) => renderImportRecordDiff(record, resolutions)).join("")}</details>`;
+    })
+    .join("");
+}
+
+function renderImportRecordDiff(
+  record: NonNullable<ParsedImportReview["records"]>[string][number],
+  resolutions: Record<string, string>,
+): string {
+  const key = `${record.store}:${record.id}`;
+  const resolution = resolutions[key];
+  const fieldRows = record.fields.length
+    ? record.fields.map((field) => renderImportFieldDiff(field)).join("")
+    : `<p class="field-help">no field changes</p>`;
+  const canUseIncoming = record.reason === "Conflicting stable ID record";
+  const actions =
+    record.status === "conflict"
+      ? `<div class="import-conflict-actions" data-conflict-key="${attr(key)}">
+          <button class="left-text-button ${resolution === "local" ? "selected" : ""}" data-import-resolution="local" data-import-conflict="${attr(key)}">keep local</button>
+          ${canUseIncoming ? `<button class="left-text-button ${resolution === "incoming" ? "selected" : ""}" data-import-resolution="incoming" data-import-conflict="${attr(key)}">use incoming</button>` : ""}
+          <button class="left-text-button ${resolution === "skip" ? "selected" : ""}" data-import-resolution="skip" data-import-conflict="${attr(key)}">skip</button>
+        </div>`
+      : "";
+  const resolved = resolution
+    ? `<p class="field-help">result: ${esc(resolution)}</p>`
+    : "";
+  return `<details class="import-record ${record.status === "conflict" ? "import-record-conflict" : ""}" ${record.status === "conflict" ? "open" : ""}><summary><span>${esc(record.status)}</span> <strong>${esc(record.label)}</strong></summary><p class="field-help">id: ${esc(record.id)}${record.updatedAt ? ` · updated: ${esc(formatTime(record.updatedAt))}` : ""}</p>${record.reason ? `<p class="error">${esc(record.reason)}</p>` : ""}${fieldRows}${actions}${resolved}</details>`;
+}
+
+function renderImportFieldDiff(field: {
+  field: string;
+  local: string;
+  incoming: string;
+  text: boolean;
+}): string {
+  if (field.text)
+    return `<details class="import-field-diff"><summary>${esc(field.field)}</summary><pre><span class="diff-local">local</span>\n${esc(field.local)}\n\n<span class="diff-incoming">incoming</span>\n${esc(field.incoming)}</pre></details>`;
+  return `<table class="import-field-table"><tbody><tr><th scope="row">${esc(field.field)}</th><td><span class="field-help">local</span><br>${esc(field.local)}</td><td><span class="field-help">incoming</span><br>${esc(field.incoming)}</td></tr></tbody></table>`;
 }
 
 function renderAgentsPanel(state: AppState, app: HTMLElement): string {
