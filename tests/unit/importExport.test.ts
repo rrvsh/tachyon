@@ -6,7 +6,11 @@ import {
   createExport,
   importFile,
 } from "../../src/data/importExport";
-import type { MessageRecord, SessionRecord } from "../../src/data/schema";
+import type {
+  AgentRecord,
+  MessageRecord,
+  SessionRecord,
+} from "../../src/data/schema";
 
 describe("import/export", () => {
   beforeEach(async () => clearDbForTests());
@@ -122,6 +126,33 @@ describe("import/export", () => {
     const snap = await snapshot();
     expect(snap.sessions[0].title).toBe("a");
     expect(snap.quarantined).toHaveLength(1);
+  });
+
+  it("keeps local agent conflicts without quarantining when resolved to local", async () => {
+    const agent: AgentRecord = {
+      id: "agent-conflict",
+      name: "agent",
+      model: "local-model",
+      systemPrompt: "prompt",
+      params: {},
+      createdAt: 1,
+      updatedAt: 2,
+      archived: false,
+    };
+    await putOne("agents", agent);
+    await importFile(
+      {
+        version: 1,
+        exportedAt: 3,
+        sessions: [],
+        messages: [],
+        agents: [{ ...agent, model: "incoming-model", updatedAt: 3 }],
+      },
+      { "agents:agent-conflict": "local" },
+    );
+    const snap = await snapshot();
+    expect(snap.agents[0].model).toBe("local-model");
+    expect(snap.quarantined).toHaveLength(0);
   });
 
   it("applies explicit incoming conflict resolutions during merge", async () => {

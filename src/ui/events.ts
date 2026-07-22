@@ -173,15 +173,11 @@ export function bindEvents(app: HTMLElement): void {
       delete app.dataset.importReview;
       delete app.dataset.importReviewText;
       delete app.dataset.importResolutions;
-      if (syncReview)
-        saveGithubSyncState({
-          ...getGithubSyncState(),
-          status: "local changes",
-          dirtySince: Date.now(),
-          conflictSummary: null,
-          pendingImportText: null,
-          pendingImportReview: null,
-        });
+      if (syncReview) {
+        const state = await overwriteGithubRemote();
+        if (state.status === "error")
+          notify(state.error ?? "Sync failed.", "error");
+      }
       return refresh();
     }
     if (target.matches("[data-import-replace]")) {
