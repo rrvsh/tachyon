@@ -1144,9 +1144,9 @@ function renderImportRecordDiff(
   const actions =
     record.status === "conflict"
       ? `<div class="import-conflict-actions" data-conflict-key="${attr(key)}">
-          <button class="left-text-button ${resolution === "local" ? "selected" : ""}" data-import-resolution="local" data-import-conflict="${attr(key)}">keep local</button>
-          ${canUseIncoming ? `<button class="left-text-button ${resolution === "incoming" ? "selected" : ""}" data-import-resolution="incoming" data-import-conflict="${attr(key)}">use incoming</button>` : ""}
-          <button class="left-text-button ${resolution === "skip" ? "selected" : ""}" data-import-resolution="skip" data-import-conflict="${attr(key)}">skip</button>
+          <button type="button" class="left-text-button ${resolution === "local" ? "selected" : ""}" data-import-resolution="local" data-import-conflict="${attr(key)}">keep local</button>
+          ${canUseIncoming ? `<button type="button" class="left-text-button ${resolution === "incoming" ? "selected" : ""}" data-import-resolution="incoming" data-import-conflict="${attr(key)}">use incoming</button>` : ""}
+          <button type="button" class="left-text-button ${resolution === "skip" ? "selected" : ""}" data-import-resolution="skip" data-import-conflict="${attr(key)}">skip</button>
         </div>`
       : "";
   const resolved = resolution

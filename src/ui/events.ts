@@ -104,8 +104,15 @@ export function bindEvents(app: HTMLElement): void {
         notify("Configure GitHub repository and token first.", "error");
       return refresh();
     }
-    const conflictKey = target.getAttribute("data-import-conflict");
-    const resolution = target.getAttribute("data-import-resolution");
+    const importResolutionButton = target.closest<HTMLElement>(
+      "[data-import-conflict][data-import-resolution]",
+    );
+    const conflictKey = importResolutionButton?.getAttribute(
+      "data-import-conflict",
+    );
+    const resolution = importResolutionButton?.getAttribute(
+      "data-import-resolution",
+    );
     if (conflictKey && resolution) {
       let resolutions: Record<string, string> = {};
       try {

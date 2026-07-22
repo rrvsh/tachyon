@@ -286,6 +286,62 @@ test("copy conversation uses visible content and omits deleted thinking", async 
   expect(copied).not.toContain("deleted message");
 });
 
+test("import conflict choices resolve agent rows", async ({ page }) => {
+  await page.goto("/?debug=1&debugDelay=0");
+  const agentId = "agent-conflict";
+  const localAgent = {
+    id: agentId,
+    name: "Conflict Agent",
+    model: "local-model",
+    systemPrompt: "local prompt",
+    params: {},
+    createdAt: 1,
+    updatedAt: 2,
+    archived: false,
+  };
+  await page.evaluate(async (agent) => {
+    await new Promise<void>((resolve, reject) => {
+      const open = indexedDB.open("tachyon-chat", 1);
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        const db = open.result;
+        const tx = db.transaction("agents", "readwrite");
+        tx.objectStore("agents").put(agent);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      };
+    });
+  }, localAgent);
+
+  await page.getByRole("button", { name: "data" }).click();
+  await page.locator('input[data-action="import"]').setInputFiles({
+    name: "conflict.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(
+      JSON.stringify({
+        version: 1,
+        exportedAt: Date.now(),
+        sessions: [],
+        messages: [],
+        agents: [{ ...localAgent, model: "incoming-model", updatedAt: 3 }],
+      }),
+    ),
+  });
+
+  const conflict = page.locator(".import-record", {
+    hasText: "Conflict Agent",
+  });
+  await expect(conflict).toContainText("conflict");
+  await conflict.getByRole("button", { name: "keep local" }).click();
+  await expect(conflict).toContainText("resolved");
+  await expect(conflict).toContainText("selected: keep local");
+  await conflict.getByRole("button", { name: "use incoming" }).click();
+  await expect(conflict).toContainText("selected: use incoming");
+  await conflict.getByRole("button", { name: "skip" }).click();
+  await expect(conflict).toContainText("selected: skip");
+  await expect(page.getByRole("button", { name: "merge" })).toBeEnabled();
+});
+
 test("import and export flow uses canonical JSON records", async ({ page }) => {
   await page.goto("/?debug=1&debugDelay=0&debugText=exported");
   await page
