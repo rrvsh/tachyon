@@ -49,6 +49,8 @@ function mergeNonConflicting<T extends { updatedAt: number }>(
   existing: T,
   incoming: T,
 ): T | null {
+  if (store === "agents" && existing.updatedAt !== incoming.updatedAt)
+    return incoming.updatedAt > existing.updatedAt ? incoming : existing;
   if (
     recordsEqual(
       withoutKeys(existing, ["updatedAt"]),
@@ -58,7 +60,7 @@ function mergeNonConflicting<T extends { updatedAt: number }>(
     return incoming.updatedAt > existing.updatedAt ? incoming : existing;
   }
   if (
-    (store === "sessions" || store === "agents") &&
+    store === "sessions" &&
     recordsEqual(
       withoutKeys(existing, ["updatedAt", "archived"]),
       withoutKeys(incoming, ["updatedAt", "archived"]),

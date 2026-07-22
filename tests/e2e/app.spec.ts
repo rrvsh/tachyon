@@ -323,7 +323,7 @@ test("import conflict choices resolve agent rows", async ({ page }) => {
         exportedAt: Date.now(),
         sessions: [],
         messages: [],
-        agents: [{ ...localAgent, model: "incoming-model", updatedAt: 3 }],
+        agents: [{ ...localAgent, model: "incoming-model", updatedAt: 2 }],
       }),
     ),
   });

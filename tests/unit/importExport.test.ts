@@ -128,7 +128,7 @@ describe("import/export", () => {
     expect(snap.quarantined).toHaveLength(1);
   });
 
-  it("keeps local agent conflicts without quarantining when resolved to local", async () => {
+  it("auto-merges stable-ID agent edits using the latest updatedAt", async () => {
     const agent: AgentRecord = {
       id: "agent-conflict",
       name: "agent",
@@ -140,18 +140,27 @@ describe("import/export", () => {
       archived: false,
     };
     await putOne("agents", agent);
-    await importFile(
-      {
-        version: 1,
-        exportedAt: 3,
-        sessions: [],
-        messages: [],
-        agents: [{ ...agent, model: "incoming-model", updatedAt: 3 }],
-      },
-      { "agents:agent-conflict": "local" },
-    );
+    const review = await analyzeImport({
+      version: 1,
+      exportedAt: 3,
+      sessions: [],
+      messages: [],
+      agents: [{ ...agent, model: "incoming-model", updatedAt: 3 }],
+    });
+    expect(review.summary?.agents.quarantined).toBe(0);
+    expect(review.records?.agents[0]).toMatchObject({
+      id: "agent-conflict",
+      status: "update",
+    });
+    await importFile({
+      version: 1,
+      exportedAt: 3,
+      sessions: [],
+      messages: [],
+      agents: [{ ...agent, model: "incoming-model", updatedAt: 3 }],
+    });
     const snap = await snapshot();
-    expect(snap.agents[0].model).toBe("local-model");
+    expect(snap.agents[0].model).toBe("incoming-model");
     expect(snap.quarantined).toHaveLength(0);
   });
 
