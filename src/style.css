@@ -323,6 +323,7 @@ h2 {
 
 .data-row-actions {
   display: grid;
+  gap: 0.35rem;
   justify-items: end;
 }
 

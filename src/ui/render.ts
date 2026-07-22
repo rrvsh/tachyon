@@ -979,6 +979,7 @@ function renderDataPanel(app: HTMLElement): string {
         </div>
         <div class="data-row-actions">
           <button class="left-text-button" data-sync-now>${esc(app.dataset.importActionStatus === "syncing" ? "syncing..." : "sync")}</button>
+          <button class="left-text-button" data-sync-reset-remote>${esc(app.dataset.importActionStatus === "resetting-remote" ? "resetting remote..." : "reset remote to local")}</button>
         </div>
       </section>
 

@@ -172,6 +172,27 @@ export function bindEvents(app: HTMLElement): void {
       app.dataset.importResolutions = JSON.stringify(resolutions);
       return refresh();
     }
+    if (target.matches("[data-sync-reset-remote]")) {
+      app.dataset.importActionStatus = "resetting-remote";
+      refresh();
+      const current = getGithubSyncState();
+      if (!current.config.repository.trim() || !current.config.token.trim()) {
+        notify("Configure GitHub repository and token first.", "error");
+        delete app.dataset.importActionStatus;
+        return refresh();
+      }
+      const remote = await fetchRemoteFile(current.config);
+      saveGithubSyncState({
+        ...getGithubSyncState(),
+        remoteSha: remote?.sha ?? null,
+      });
+      const state = await overwriteGithubRemote();
+      if (state.status === "error")
+        notify(state.error ?? "Sync failed.", "error");
+      else notify("Remote reset to local data.");
+      clearImportReview(app);
+      return refresh();
+    }
     if (target.matches("[data-sync-overwrite]")) {
       app.dataset.importActionStatus = "merging";
       refresh();

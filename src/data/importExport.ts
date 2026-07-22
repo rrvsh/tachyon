@@ -51,6 +51,12 @@ function mergeNonConflicting<T extends { updatedAt: number }>(
 ): T | null {
   if (store === "agents" && existing.updatedAt !== incoming.updatedAt)
     return incoming.updatedAt > existing.updatedAt ? incoming : existing;
+  if (store === "messages") {
+    const existingMessage = existing as unknown as MessageRecord;
+    const incomingMessage = incoming as unknown as MessageRecord;
+    if (existingMessage.finalized !== incomingMessage.finalized)
+      return incomingMessage.finalized ? incoming : existing;
+  }
   if (
     recordsEqual(
       withoutKeys(existing, ["updatedAt"]),

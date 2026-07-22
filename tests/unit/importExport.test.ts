@@ -164,6 +164,64 @@ describe("import/export", () => {
     expect(snap.quarantined).toHaveLength(0);
   });
 
+  it("auto-merges same-ID messages by choosing the finalized record", async () => {
+    const message: MessageRecord = {
+      id: "m_finalized",
+      sessionId: "session1",
+      role: "assistant",
+      content: "partial",
+      parentId: null,
+      createdAt: 1,
+      updatedAt: 2,
+      finalized: false,
+    };
+    await importFile({
+      version: 1,
+      exportedAt: 1,
+      sessions: [
+        {
+          id: "session1",
+          title: "session",
+          createdAt: 1,
+          updatedAt: 1,
+          archived: false,
+          rootMessageId: "m_finalized",
+        },
+      ],
+      messages: [message],
+      agents: [],
+    });
+    const review = await analyzeImport({
+      version: 1,
+      exportedAt: 3,
+      sessions: [],
+      messages: [
+        { ...message, content: "complete", updatedAt: 3, finalized: true },
+      ],
+      agents: [],
+    });
+    expect(review.summary?.messages.quarantined).toBe(0);
+    expect(review.records?.messages[0]).toMatchObject({
+      id: "m_finalized",
+      status: "update",
+    });
+    await importFile({
+      version: 1,
+      exportedAt: 3,
+      sessions: [],
+      messages: [
+        { ...message, content: "complete", updatedAt: 3, finalized: true },
+      ],
+      agents: [],
+    });
+    const snap = await snapshot();
+    expect(snap.messages[0]).toMatchObject({
+      content: "complete",
+      finalized: true,
+    });
+    expect(snap.quarantined).toHaveLength(0);
+  });
+
   it("applies explicit incoming conflict resolutions during merge", async () => {
     const s: SessionRecord = {
       id: "abcdefgh",
