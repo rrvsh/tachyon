@@ -928,6 +928,7 @@ function renderDataPanel(app: HTMLElement): string {
   const sync = getGithubSyncState();
   const review = parseImportReview(app) ?? sync.pendingImportReview;
   const resolutions = parseImportResolutions(app);
+  const unresolvedConflicts = countUnresolvedConflicts(review, resolutions);
   const summary =
     review?.valid && review.summary
       ? renderImportSummary(review, resolutions)
@@ -940,8 +941,8 @@ function renderDataPanel(app: HTMLElement): string {
   const actions = review?.valid
     ? `
       <section class="data-row">
-        <p class="field-help">Merge adds/updates safe records and applies selected conflict decisions.</p>
-        <button class="left-text-button" data-import-merge ${hasUnresolvedConflicts(review, resolutions) ? "disabled" : ""}>merge</button>
+        <p class="field-help">Merge adds/updates safe records and applies selected conflict decisions.${unresolvedConflicts ? ` Resolve ${unresolvedConflicts} more conflict${unresolvedConflicts === 1 ? "" : "s"} first.` : ""}</p>
+        <button class="left-text-button" data-import-merge ${unresolvedConflicts ? "disabled" : ""}>merge</button>
       </section>
 
       <section class="data-row">
@@ -1079,18 +1080,18 @@ function parseImportResolutions(app: HTMLElement): Record<string, string> {
   }
 }
 
-function hasUnresolvedConflicts(
+function countUnresolvedConflicts(
   review: ParsedImportReview | null,
   resolutions: Record<string, string>,
-): boolean {
-  if (!review?.records) return false;
+): number {
+  if (!review?.records) return 0;
   return Object.values(review.records)
     .flat()
-    .some(
+    .filter(
       (record) =>
         record.status === "conflict" &&
         !resolutions[`${record.store}:${record.id}`],
-    );
+    ).length;
 }
 
 function renderImportSummary(
@@ -1149,9 +1150,12 @@ function renderImportRecordDiff(
         </div>`
       : "";
   const resolved = resolution
-    ? `<p class="field-help">result: ${esc(resolution)}</p>`
+    ? `<p class="field-help">selected: ${esc(resolution === "local" ? "keep local" : resolution === "incoming" ? "use incoming" : "skip")}</p>`
     : "";
-  return `<details class="import-record ${record.status === "conflict" ? "import-record-conflict" : ""}" ${record.status === "conflict" ? "open" : ""}><summary><span>${esc(record.status)}</span> <strong>${esc(record.label)}</strong></summary><p class="field-help">id: ${esc(record.id)}${record.updatedAt ? ` · updated: ${esc(formatTime(record.updatedAt))}` : ""}</p>${record.reason ? `<p class="error">${esc(record.reason)}</p>` : ""}${fieldRows}${actions}${resolved}</details>`;
+  const reason = record.reason
+    ? `<p class="${resolution ? "field-help" : "error"}">reason: ${esc(record.reason)}</p>`
+    : "";
+  return `<details class="import-record ${record.status === "conflict" && !resolution ? "import-record-conflict" : ""}" ${record.status === "conflict" ? "open" : ""}><summary><span>${esc(resolution ? "resolved" : record.status)}</span> <strong>${esc(record.label)}</strong></summary><p class="field-help">id: ${esc(record.id)}${record.updatedAt ? ` · updated: ${esc(formatTime(record.updatedAt))}` : ""}</p>${reason}${fieldRows}${actions}${resolved}</details>`;
 }
 
 function renderImportFieldDiff(field: {
