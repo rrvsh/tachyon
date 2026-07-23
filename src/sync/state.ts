@@ -77,7 +77,15 @@ export function getGithubSyncState(): GithubSyncState {
 }
 
 export function saveGithubSyncState(state: GithubSyncState): void {
-  localStorage.setItem(KEY, JSON.stringify(state));
+  localStorage.setItem(
+    KEY,
+    JSON.stringify({
+      ...state,
+      conflictSummary: null,
+      pendingImportText: null,
+      pendingImportReview: null,
+    }),
+  );
 }
 
 export function updateGithubSyncState(

@@ -56,8 +56,20 @@ async function setImportReview(
 
 async function refreshSyncImportReview(app: HTMLElement): Promise<void> {
   const syncState = getGithubSyncState();
-  if (syncState.status !== "conflict" || !syncState.pendingImportText) return;
-  await setImportReview(app, syncState.pendingImportText, "sync");
+  if (syncState.status !== "conflict") return;
+  const remote = await fetchRemoteFile(syncState.config);
+  if (!remote) {
+    notify("Remote sync file is missing. Run sync again.", "error");
+    return;
+  }
+  saveGithubSyncState({
+    ...getGithubSyncState(),
+    remoteSha: remote.sha,
+    pendingImportText: null,
+    pendingImportReview: null,
+    conflictSummary: null,
+  });
+  await setImportReview(app, remote.text, "sync");
 }
 
 function clearImportReview(app: HTMLElement): void {

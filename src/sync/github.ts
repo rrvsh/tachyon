@@ -256,7 +256,7 @@ export async function runGithubFullSync(
         lastPull: now,
         status: "conflict",
         conflictSummary: null,
-        pendingImportText: remote.text,
+        pendingImportText: null,
         pendingImportReview: null,
         autosyncPending: false,
       });
