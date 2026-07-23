@@ -28,6 +28,34 @@ interface GithubBlob {
   encoding?: string;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
+}
+
+function byId<T extends { id: string }>(records: T[]): T[] {
+  return [...records].sort((a, b) => a.id.localeCompare(b.id));
+}
+
+function exportDataEqualIgnoringExportedAt(
+  left: Awaited<ReturnType<typeof createExport>>,
+  right: Awaited<ReturnType<typeof createExport>>,
+): boolean {
+  return (
+    JSON.stringify({
+      version: left.version,
+      sessions: byId(left.sessions),
+      messages: byId(left.messages),
+      agents: byId(left.agents),
+    }) ===
+    JSON.stringify({
+      version: right.version,
+      sessions: byId(right.sessions),
+      messages: byId(right.messages),
+      agents: byId(right.agents),
+    })
+  );
+}
+
 function parseRepository(repository: string): { owner: string; repo: string } {
   const [owner, repo] = repository.trim().split("/");
   if (!owner || !repo) throw new Error("GitHub repository must be owner/repo.");
@@ -235,7 +263,22 @@ export async function runGithubFullSync(
     }
 
     await importFile(parsed);
-    const exportText = JSON.stringify(await createExport(), null, 2);
+    const exportFile = await createExport();
+    if (exportDataEqualIgnoringExportedAt(exportFile, parsed)) {
+      return updateGithubSyncState({
+        remoteSha: remote.sha,
+        dirtySince: null,
+        lastPull: now,
+        lastSync: Date.now(),
+        status: "synced",
+        error: null,
+        conflictSummary: null,
+        pendingImportText: null,
+        pendingImportReview: null,
+        autosyncPending: false,
+      });
+    }
+    const exportText = JSON.stringify(exportFile, null, 2);
     const latestRemote = await fetchRemoteFile(state.config);
     const sha = await pushRemoteFile(
       state.config,
@@ -261,6 +304,7 @@ export async function runGithubFullSync(
       (
         window as unknown as { __tachyonSyncRunning?: boolean }
       ).__tachyonSyncRunning = false;
+      await sleep(1000);
       return runGithubFullSync(false);
     }
     return updateGithubSyncState({
@@ -310,8 +354,10 @@ export async function overwriteGithubRemote(
       autosyncPending: false,
     });
   } catch (error) {
-    if (retryOnShaMismatch && isGithubShaMismatch(error))
+    if (retryOnShaMismatch && isGithubShaMismatch(error)) {
+      await sleep(1000);
       return overwriteGithubRemote(false);
+    }
     return updateGithubSyncState({
       status: "error",
       error: error instanceof Error ? error.message : String(error),

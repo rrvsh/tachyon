@@ -1,7 +1,11 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { clearDbForTests } from "../../src/data/db";
-import { fetchRemoteFile, overwriteGithubRemote } from "../../src/sync/github";
+import {
+  fetchRemoteFile,
+  overwriteGithubRemote,
+  runGithubFullSync,
+} from "../../src/sync/github";
 import {
   defaultGithubSyncState,
   saveGithubSyncState,
@@ -82,6 +86,39 @@ describe("github sync remote fetch", () => {
     );
 
     vi.unstubAllGlobals();
+  });
+
+  it("does not rewrite identical remote data just to change exportedAt", async () => {
+    saveGithubSyncState({
+      ...defaultGithubSyncState(),
+      config,
+      remoteSha: "current-sha",
+      status: "local changes",
+      dirtySince: 1,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockJsonResponse({
+        content: btoa(
+          JSON.stringify({
+            version: 1,
+            exportedAt: 1,
+            sessions: [],
+            messages: [],
+            agents: [],
+          }),
+        ),
+        encoding: "base64",
+        sha: "current-sha",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(runGithubFullSync()).resolves.toMatchObject({
+      remoteSha: "current-sha",
+      status: "synced",
+      dirtySince: null,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("overwrites using the current remote sha instead of stored state", async () => {

@@ -5,6 +5,7 @@ import { siblings } from "../messages/tree";
 import { currentSettings, viewedHasInflight } from "../app/actions";
 import { composerDraftKey, readComposerDraft } from "./drafts";
 import { FONT_OPTIONS } from "../settings/settings";
+import { APP_COMMIT } from "../version";
 import { getGithubSyncState } from "../sync/state";
 import { resolveAgentProvider } from "../agents/providers";
 
@@ -920,6 +921,8 @@ function renderSettingsPanel(settings: {
       <div class="settings-actions">
         <button class="left-text-button save-settings-button" data-save-settings>save</button>
       </div>
+
+      <p class="settings-version">version ${esc(APP_COMMIT.slice(0, 7))}</p>
     </section>
   `;
 }

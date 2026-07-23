@@ -302,6 +302,12 @@ h2 {
   margin: 0;
 }
 
+.settings-version {
+  color: var(--muted);
+  font-size: 0.75rem;
+  margin: 1rem 0 0;
+}
+
 .data-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
