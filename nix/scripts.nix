@@ -1,5 +1,5 @@
 {
-  perSystem = { pkgs, lib, ... }: {
+  perSystem = { pkgs, ... }: {
     devShells.default =
       let
         run = pkgs.writeShellApplication {
