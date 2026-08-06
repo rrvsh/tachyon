@@ -12,3 +12,5 @@ Available scripts:
 - `smoke-test` -> checks that the `index.html` document has the necessary metadata.
 
 You can also directly run the scripts from `scripts/` - see `nix/scripts.nix` for the required installations.
+
+Formatting and linting is handled by `nix fmt` and `nix flake check`.

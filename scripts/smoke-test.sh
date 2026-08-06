@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-root="$(git rev-parse --show-toplevel)"
+root="${1:-$(git rev-parse --show-toplevel)}"
 index="$root/index.html"
 grep --quiet --fixed-strings "<!doctype html>" "$index"
 echo "doctype declaration found"
