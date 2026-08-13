@@ -5,9 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Tachyon</title>
     <link href="styles.css" rel="stylesheet" />
+    <script type="module" src="script.js"></script>
   </head>
   <body>
-    <h1>Header</h1>
-    <p>paragraph</p>
+    <h1>[ TACHYON ]</h1>
+    <form id="composer">
+      <p>
+        <label for="openrouter_api_key">OpenRouter API Key:</label>
+        <input name="openrouter_api_key" id="openrouter_api_key" required />
+      </p>
+      <p>
+        <label for="prompt">Prompt:</label>
+        <input name="prompt" id="prompt" required />
+      </p>
+      <button type="submit">Send</button>
+    </form>
   </body>
 </html>
