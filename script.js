@@ -5,6 +5,8 @@ composer.addEventListener("submit", async (event) => {
   event.preventDefault();
   const formKey = document.querySelector("#openrouter_api_key").value.trim();
   const prompt = document.querySelector("#prompt").value.trim();
+  const output = document.querySelector("#output");
+  const sendBtn = document.querySelector("#sendBtn");
   if (formKey) {
     localStorage.setItem("openrouter_api_key", formKey);
   }
@@ -15,27 +17,39 @@ composer.addEventListener("submit", async (event) => {
     );
     return;
   }
-  const response = await fetch(openRouterApiUrl, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "X-OpenRouter-Title": "Tachyon",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "openrouter/free",
-      messages: [
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-    }),
-  });
-  const result = await response.json();
-  if (!response.ok) {
-    console.log(`Error: ${result.error.code} ${result.error.message}`);
-  } else {
-    console.log(result.choices[0].message.content);
+  sendBtn.textContent = "Sending...";
+  sendBtn.disabled = true;
+  output.textContent = "...";
+  try {
+    const response = await fetch(openRouterApiUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "X-OpenRouter-Title": "Tachyon",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "openrouter/free",
+        messages: [
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      output.textContent = `Error: ${result.error.code} ${result.error.message}`;
+    } else {
+      output.textContent = result.choices[0].message.content;
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    output.textContent = `Request failed: ${message}`;
+    console.error(error);
+  } finally {
+    sendBtn.textContent = "Send";
+    sendBtn.disabled = false;
   }
 });
