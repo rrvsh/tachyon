@@ -1,6 +1,8 @@
 import type {
   AgentRecord,
+  ConnectionRecord,
   ExportFile,
+  ExportFileV1,
   MessageRecord,
   SessionRecord,
 } from "./schema";
@@ -81,6 +83,9 @@ export function validateAgent(value: unknown): value is AgentRecord {
     hasString(value, "model") &&
     hasString(value, "systemPrompt") &&
     isObject(value.params) &&
+    (!("connectionId" in value) ||
+      typeof value.connectionId === "string" ||
+      value.connectionId === null) &&
     hasNumber(value, "createdAt") &&
     hasNumber(value, "updatedAt") &&
     typeof value.archived === "boolean"
@@ -98,21 +103,57 @@ export function validateAgentConfig(agent: AgentRecord): string[] {
   return errors;
 }
 
-export function validateExportFile(value: unknown): value is ExportFile {
+export function validateConnection(value: unknown): value is ConnectionRecord {
+  if (!isObject(value)) return false;
+  return (
+    hasString(value, "id") &&
+    hasString(value, "name") &&
+    hasString(value, "endpointUrl") &&
+    hasNumber(value, "createdAt") &&
+    hasNumber(value, "updatedAt") &&
+    typeof value.archived === "boolean"
+  );
+}
+
+export function validateExportFile(
+  value: unknown,
+): value is ExportFile | ExportFileV1 {
   if (
     !isObject(value) ||
-    value.version !== 1 ||
+    (value.version !== 1 && value.version !== 2) ||
     !hasNumber(value, "exportedAt")
   )
     return false;
+  if (
+    !Array.isArray(value.sessions) ||
+    !Array.isArray(value.messages) ||
+    !Array.isArray(value.agents) ||
+    !value.sessions.every(validateSession) ||
+    !value.messages.every(validateMessage) ||
+    !value.agents.every(validateAgent)
+  )
+    return false;
   return (
-    Array.isArray(value.sessions) &&
-    Array.isArray(value.messages) &&
-    Array.isArray(value.agents) &&
-    value.sessions.every(validateSession) &&
-    value.messages.every(validateMessage) &&
-    value.agents.every(validateAgent)
+    value.version === 1 ||
+    (Array.isArray(value.connections) &&
+      value.connections.every(validateConnection))
   );
+}
+
+export function normalizeExportFile(value: unknown): ExportFile | null {
+  if (!validateExportFile(value)) return null;
+  if (value.version === 2) return value;
+  return {
+    version: 2,
+    exportedAt: value.exportedAt,
+    sessions: value.sessions,
+    messages: value.messages,
+    agents: value.agents.map((agent) => ({
+      ...agent,
+      connectionId: agent.connectionId ?? null,
+    })),
+    connections: [],
+  };
 }
 
 export function recordsEqual(a: unknown, b: unknown): boolean {

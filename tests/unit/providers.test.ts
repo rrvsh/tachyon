@@ -18,6 +18,7 @@ function emptyState(agent = defaultAgent()): AppState {
     messages: [],
     visible: [],
     agents: [agent],
+    connections: [],
     currentMessageId: null,
     errors: [],
     info: [],
@@ -40,19 +41,26 @@ describe("agent provider resolution", () => {
     ).toBe("openrouter");
   });
 
-  it("returns OpenRouter param sections for current agents", () => {
+  it("shows routing parameters only for OpenRouter agents", () => {
     expect(getParamSectionsForAgent(defaultAgent())).toBe(
       openRouterParamSections,
     );
     expect(
       openRouterParamSections.some((section) => section.title === "routing"),
     ).toBe(true);
+    expect(
+      getParamSectionsForAgent({
+        ...defaultAgent(),
+        connectionId: "c_custom",
+      }).some((section) => section.title === "routing"),
+    ).toBe(false);
   });
 
   it("renders OpenRouter params in the current agent form", () => {
     localStorage.clear();
     const agent = defaultAgent();
     saveSettings({
+      connectionApiKeys: {},
       openRouterApiKey: "",
       selectedAgentId: agent.id,
       fontFamily: DEFAULT_FONT_FAMILY,

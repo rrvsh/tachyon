@@ -47,6 +47,11 @@ export function getSettings(): SettingsRecord {
     ) as Partial<SettingsRecord> & { apiKey?: string };
     return {
       openRouterApiKey: parsed.openRouterApiKey ?? parsed.apiKey ?? "",
+      connectionApiKeys:
+        typeof parsed.connectionApiKeys === "object" &&
+        parsed.connectionApiKeys !== null
+          ? parsed.connectionApiKeys
+          : {},
       selectedAgentId: parsed.selectedAgentId ?? null,
       fontFamily: parsed.fontFamily ?? DEFAULT_FONT_FAMILY,
       openThinkingByDefault: parsed.openThinkingByDefault ?? true,
@@ -55,6 +60,7 @@ export function getSettings(): SettingsRecord {
   } catch {
     return {
       openRouterApiKey: "",
+      connectionApiKeys: {},
       selectedAgentId: null,
       fontFamily: DEFAULT_FONT_FAMILY,
       openThinkingByDefault: true,
@@ -65,6 +71,21 @@ export function getSettings(): SettingsRecord {
 
 export function saveSettings(settings: SettingsRecord): void {
   localStorage.setItem(KEY, JSON.stringify(settings));
+}
+
+export function getConnectionApiKey(connectionId: string): string {
+  return getSettings().connectionApiKeys[connectionId] ?? "";
+}
+
+export function saveConnectionApiKey(
+  connectionId: string,
+  apiKey: string,
+): void {
+  const settings = getSettings();
+  const connectionApiKeys = { ...settings.connectionApiKeys };
+  if (apiKey.trim()) connectionApiKeys[connectionId] = apiKey.trim();
+  else delete connectionApiKeys[connectionId];
+  saveSettings({ ...settings, connectionApiKeys });
 }
 
 export function applyFontFamily(fontFamily: string): void {

@@ -9,7 +9,7 @@ export interface TransportRequest {
   agent: AgentRecord;
   turns: TransportTurn[];
   sessionId: string;
-  openRouterApiKey?: string;
+  apiKey?: string;
   signal: AbortSignal;
 }
 

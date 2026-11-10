@@ -21,6 +21,7 @@ describe("settings", () => {
     );
 
     expect(getSettings()).toMatchObject({
+      connectionApiKeys: {},
       openRouterApiKey: "sk-or-legacy",
       selectedAgentId: "agent1",
     });
@@ -28,6 +29,7 @@ describe("settings", () => {
 
   it("saves only openRouterApiKey", () => {
     saveSettings({
+      connectionApiKeys: {},
       openRouterApiKey: "sk-or-new",
       selectedAgentId: null,
       fontFamily: DEFAULT_FONT_FAMILY,

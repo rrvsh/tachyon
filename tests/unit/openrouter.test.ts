@@ -44,7 +44,7 @@ describe("openRouterTransport", () => {
           { role: "assistant", content: "hi before" },
         ],
         sessionId: "sess1234",
-        openRouterApiKey: "sk-or-test",
+        apiKey: "sk-or-test",
         signal: new AbortController().signal,
       },
       (delta) => {

@@ -17,6 +17,72 @@ test("debug mode can create and stream a session", async ({ page }) => {
   );
 });
 
+test("custom connection streams through its exact Chat Completions URL", async ({
+  page,
+}) => {
+  let requestBody: Record<string, unknown> | null = null;
+  let authorization = "";
+  await page.route(
+    "https://api.example.com/v1/chat/completions",
+    async (route) => {
+      requestBody = route.request().postDataJSON() as Record<string, unknown>;
+      authorization = route.request().headers().authorization ?? "";
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: [
+          'data: {"choices":[{"delta":{"reasoning_content":"working"}}]}',
+          "",
+          'data: {"choices":[{"delta":{"content":"custom reply"}}]}',
+          "",
+          "data: [DONE]",
+          "",
+        ].join("\n"),
+      });
+    },
+  );
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "settings" }).click();
+  await page.getByRole("button", { name: "add connection" }).click();
+  const connectionForm = page.locator("[data-connection-form]");
+  await connectionForm.getByLabel("name").fill("Example API");
+  await connectionForm
+    .getByLabel("chat completions URL")
+    .fill("https://api.example.com/v1/chat/completions");
+  await connectionForm.getByLabel("API key").fill("custom-secret");
+  await connectionForm.getByRole("button", { name: "save" }).click();
+
+  await page.getByRole("button", { name: "agents" }).click();
+  await page.getByRole("button", { name: "create new" }).click();
+  const agentForm = page.locator("[data-agent-form]");
+  await agentForm.getByLabel("name").fill("Custom agent");
+  await agentForm
+    .getByLabel("connection")
+    .selectOption({ label: "Example API" });
+  await agentForm.getByLabel("model slug").fill("example-model");
+  await agentForm.getByRole("button", { name: "Save agent" }).click();
+
+  await page
+    .getByLabel("agent", { exact: true })
+    .selectOption({ label: "Custom agent" });
+  await page
+    .getByPlaceholder("Message (empty for assistant-only)")
+    .fill("hello custom API");
+  await page.getByRole("button", { name: "Send" }).click();
+
+  await expect(page.locator(".thinking-block")).toContainText("working");
+  await expect(page.locator(".message.assistant")).toContainText(
+    "custom reply",
+  );
+  expect(authorization).toBe("Bearer custom-secret");
+  expect(requestBody).toMatchObject({
+    model: "example-model",
+    messages: [{ role: "user", content: "hello custom API" }],
+    stream: true,
+  });
+});
+
 test("right sidebar sessions collapses and persists", async ({ page }) => {
   await page.goto("/?debug=1&debugDelay=0");
   await expect(page.getByRole("button", { name: "new chat" })).toHaveCount(0);
@@ -301,7 +367,7 @@ test("import conflict choices resolve agent rows", async ({ page }) => {
   };
   await page.evaluate(async (agent) => {
     await new Promise<void>((resolve, reject) => {
-      const open = indexedDB.open("tachyon-chat", 1);
+      const open = indexedDB.open("tachyon-chat", 2);
       open.onerror = () => reject(open.error);
       open.onsuccess = () => {
         const db = open.result;
