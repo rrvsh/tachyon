@@ -1,9 +1,19 @@
 import { getMessagesBySession, getOne, putOne, transactPut } from "../data/db";
-import type { AgentRecord, MessageRecord, SessionRecord } from "../data/schema";
+import type {
+  AgentRecord,
+  ConnectionRecord,
+  MessageRecord,
+  SessionRecord,
+} from "../data/schema";
 import { makeMessage, makeSession, deriveTitle } from "../messages/operations";
 import { pathToMessage } from "../messages/tree";
-import { getSettings, setCurrentPointer } from "../settings/settings";
+import {
+  getConnectionApiKey,
+  getSettings,
+  setCurrentPointer,
+} from "../settings/settings";
 import { debugTransport } from "./debug";
+import { openAICompatibleTransport } from "./openaiCompatible";
 import { openRouterTransport } from "./openrouter";
 import { isAbort, type Transport } from "./transport";
 
@@ -67,7 +77,18 @@ export async function startRequest(input: {
       ? await getOne<AgentRecord>("agents", settings.selectedAgentId)
       : undefined;
     if (!agent) throw new Error("Select an agent before starting a request.");
-    if (!debug && !settings.openRouterApiKey)
+    let connection: ConnectionRecord | undefined;
+    if (!debug && agent.connectionId) {
+      connection = await getOne<ConnectionRecord>(
+        "connections",
+        agent.connectionId,
+      );
+      if (!connection)
+        throw new Error(
+          "The selected connection no longer exists. Edit the agent to choose another connection.",
+        );
+    }
+    if (!debug && !agent.connectionId && !settings.openRouterApiKey)
       throw new Error("OpenRouter API key is required.");
 
     let session = input.sessionId
@@ -148,14 +169,22 @@ export async function startRequest(input: {
       startedAt: Date.now(),
     });
     const transport =
-      input.transport ?? (debug ? debugTransport : openRouterTransport);
+      input.transport ??
+      (debug
+        ? debugTransport
+        : connection
+          ? openAICompatibleTransport(connection)
+          : openRouterTransport);
+    const apiKey = connection
+      ? getConnectionApiKey(connection.id)
+      : settings.openRouterApiKey;
     void transport
       .stream(
         {
           agent,
           turns,
           sessionId,
-          openRouterApiKey: settings.openRouterApiKey,
+          apiKey,
           signal: abortController.signal,
         },
         async (delta) => {

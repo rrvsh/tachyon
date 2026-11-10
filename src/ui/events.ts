@@ -2,6 +2,7 @@ import {
   abortViewed,
   analyzeImportJsonText,
   archiveAgent,
+  archiveConnection,
   archiveSession,
   currentSettings,
   deleteMessage,
@@ -9,12 +10,14 @@ import {
   editMessage,
   exportJson,
   forkMessage,
+  forgetConnectionApiKey,
   importJsonText,
   newSession,
   openSession,
   regenerate,
   replaceJsonText,
   saveAgent,
+  saveConnection,
   selectBranch,
   send,
   updateSettings,
@@ -129,18 +132,51 @@ export function bindEvents(app: HTMLElement): void {
       return void duplicateAgent(agentDuplicate).then(refresh);
     const agentEdit = target.getAttribute("data-agent-edit");
     if (agentEdit) {
+      const state = await loadState();
       app.dataset.agentFormMode = "edit";
       app.dataset.agentFormId = agentEdit;
+      app.dataset.agentFormConnectionId =
+        state.agents.find((agent) => agent.id === agentEdit)?.connectionId ??
+        "";
       return refresh();
     }
     if (target.matches("[data-agent-create]")) {
       app.dataset.agentFormMode = "create";
       delete app.dataset.agentFormId;
+      app.dataset.agentFormConnectionId = "";
       return refresh();
     }
     if (target.matches("[data-agent-form-cancel]")) {
       delete app.dataset.agentFormMode;
       delete app.dataset.agentFormId;
+      delete app.dataset.agentFormConnectionId;
+      return refresh();
+    }
+    const connectionEdit = target.getAttribute("data-connection-edit");
+    if (connectionEdit) {
+      app.dataset.connectionFormMode = "edit";
+      app.dataset.connectionFormId = connectionEdit;
+      return refresh();
+    }
+    if (target.matches("[data-connection-create]")) {
+      app.dataset.connectionFormMode = "create";
+      delete app.dataset.connectionFormId;
+      return refresh();
+    }
+    if (target.matches("[data-connection-form-cancel]")) {
+      delete app.dataset.connectionFormMode;
+      delete app.dataset.connectionFormId;
+      return refresh();
+    }
+    const connectionArchive = target.getAttribute("data-connection-archive");
+    if (connectionArchive)
+      return void archiveConnection(
+        connectionArchive,
+        target.getAttribute("aria-label") !== "Restore connection",
+      ).then(refresh);
+    const forgetKey = target.getAttribute("data-connection-forget-key");
+    if (forgetKey) {
+      forgetConnectionApiKey(forgetKey);
       return refresh();
     }
     if (target.matches("[data-sync-now]")) {
@@ -421,11 +457,27 @@ export function bindEvents(app: HTMLElement): void {
         name: String(fd.get("name") ?? ""),
         model: String(fd.get("model") ?? ""),
         systemPrompt: String(fd.get("systemPrompt") ?? ""),
+        connectionId: String(fd.get("connectionId") || "") || null,
         params: collectParams(form),
       });
       if (saved) {
         delete app.dataset.agentFormMode;
         delete app.dataset.agentFormId;
+        delete app.dataset.agentFormConnectionId;
+      }
+      refresh();
+    }
+    if (form.matches("[data-connection-form]")) {
+      const fd = new FormData(form);
+      const saved = await saveConnection({
+        id: String(fd.get("id") || "") || undefined,
+        name: String(fd.get("name") ?? ""),
+        endpointUrl: String(fd.get("endpointUrl") ?? ""),
+        apiKey: String(fd.get("apiKey") ?? ""),
+      });
+      if (saved) {
+        delete app.dataset.connectionFormMode;
+        delete app.dataset.connectionFormId;
       }
       refresh();
     }
@@ -468,6 +520,11 @@ export function bindEvents(app: HTMLElement): void {
   });
   app.addEventListener("change", async (event) => {
     const target = event.target as HTMLElement;
+    if (target.matches("[data-agent-connection]")) {
+      app.dataset.agentFormConnectionId = (target as HTMLSelectElement).value;
+      refresh();
+      return;
+    }
     if (target.matches("[data-composer-agent]")) {
       const settings = currentSettings();
       updateSettings(
@@ -745,6 +802,10 @@ function populateAgentForm(target: HTMLElement): void {
     row.dataset.agentModel ?? "";
   (form.elements.namedItem("systemPrompt") as HTMLTextAreaElement).value =
     row.dataset.agentSystemPrompt ?? "";
+  const connection = form.elements.namedItem(
+    "connectionId",
+  ) as HTMLSelectElement;
+  if (connection) connection.value = row.dataset.agentConnectionId ?? "";
   const commonKeys = new Set<string>();
   form
     .querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-param-path]")

@@ -1,18 +1,28 @@
 import { assertValidAgentConfig, makeAgent } from "../agents/agents";
 import {
+  makeConnection,
+  validateConnectionConfig,
+} from "../connections/connections";
+import {
   analyzeImport,
   createExport,
   importFile,
   replaceImport,
 } from "../data/importExport";
 import { getMessagesBySession, getOne, putOne, transactPut } from "../data/db";
-import type { AgentRecord, MessageRecord, SessionRecord } from "../data/schema";
+import type {
+  AgentRecord,
+  ConnectionRecord,
+  MessageRecord,
+  SessionRecord,
+} from "../data/schema";
 import { copyPathToNewSession, editWithSubtree } from "../messages/operations";
 import { latestDescendant, latestLeaf, pathToMessage } from "../messages/tree";
 import { abortRequest, hasInflight, startRequest } from "../requests/lifecycle";
 import {
   applyFontFamily,
   getSettings,
+  saveConnectionApiKey,
   saveSettings,
   setCurrentPointer,
 } from "../settings/settings";
@@ -174,6 +184,7 @@ export async function saveAgent(form: {
   name: string;
   model: string;
   systemPrompt: string;
+  connectionId?: string | null;
   params: string | Record<string, unknown>;
   archived?: boolean;
 }): Promise<boolean> {
@@ -193,6 +204,7 @@ export async function saveAgent(form: {
       name: form.name,
       model: form.model,
       systemPrompt: form.systemPrompt,
+      connectionId: form.connectionId ?? null,
       params,
       archived: form.archived ?? existing?.archived ?? false,
     });
@@ -222,6 +234,7 @@ export async function duplicateAgent(id: string): Promise<void> {
       name: `${a.name} copy`,
       model: a.model,
       systemPrompt: a.systemPrompt,
+      connectionId: a.connectionId ?? null,
       params: a.params,
       archived: false,
     }),
@@ -230,6 +243,51 @@ export async function duplicateAgent(id: string): Promise<void> {
 export async function getAgent(id: string): Promise<AgentRecord | undefined> {
   return getOne<AgentRecord>("agents", id);
 }
+
+export async function saveConnection(form: {
+  id?: string;
+  name: string;
+  endpointUrl: string;
+  apiKey?: string;
+}): Promise<boolean> {
+  try {
+    const existing = form.id
+      ? await getOne<ConnectionRecord>("connections", form.id)
+      : undefined;
+    const connection = makeConnection({
+      ...existing,
+      id: form.id ?? existing?.id,
+      name: form.name,
+      endpointUrl: form.endpointUrl,
+    });
+    const errors = validateConnectionConfig(connection);
+    if (errors.length) throw new Error(errors.join("\n"));
+    await putOne("connections", connection);
+    if (form.apiKey?.trim()) saveConnectionApiKey(connection.id, form.apiKey);
+    return true;
+  } catch (error) {
+    notify(error instanceof Error ? error.message : String(error), "error");
+    return false;
+  }
+}
+
+export async function archiveConnection(
+  id: string,
+  archived: boolean,
+): Promise<void> {
+  const connection = await getOne<ConnectionRecord>("connections", id);
+  if (connection)
+    await putOne("connections", {
+      ...connection,
+      archived,
+      updatedAt: Date.now(),
+    });
+}
+
+export function forgetConnectionApiKey(id: string): void {
+  saveConnectionApiKey(id, "");
+}
+
 export function updateSettings(
   openRouterApiKey: string,
   selectedAgentId: string | null,
@@ -238,6 +296,7 @@ export function updateSettings(
   rightSidebarCollapsed = currentSettings().rightSidebarCollapsed,
 ): void {
   saveSettings({
+    ...currentSettings(),
     openRouterApiKey,
     selectedAgentId,
     fontFamily,

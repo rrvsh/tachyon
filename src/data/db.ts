@@ -3,6 +3,7 @@ import {
   DB_NAME,
   DB_VERSION,
   type AgentRecord,
+  type ConnectionRecord,
   type MessageRecord,
   type QuarantineRecord,
   type SessionRecord,
@@ -12,10 +13,12 @@ export interface DbSnapshot {
   sessions: SessionRecord[];
   messages: MessageRecord[];
   agents: AgentRecord[];
+  connections: ConnectionRecord[];
   quarantined: QuarantineRecord[];
 }
 
-type Store = "sessions" | "messages" | "agents" | "quarantine";
+export type Store =
+  "sessions" | "messages" | "agents" | "connections" | "quarantine";
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 function openDb(): Promise<IDBDatabase> {
@@ -32,6 +35,8 @@ function openDb(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains("agents"))
         db.createObjectStore("agents", { keyPath: "id" });
+      if (!db.objectStoreNames.contains("connections"))
+        db.createObjectStore("connections", { keyPath: "id" });
       if (!db.objectStoreNames.contains("quarantine"))
         db.createObjectStore("quarantine", { keyPath: "id" });
     };
@@ -93,32 +98,27 @@ export async function replaceData(records: {
   sessions: SessionRecord[];
   messages: MessageRecord[];
   agents: AgentRecord[];
+  connections: ConnectionRecord[];
   quarantine?: QuarantineRecord[];
 }): Promise<void> {
-  const tx = await store("readwrite", [
+  const names: Store[] = [
     "sessions",
     "messages",
     "agents",
+    "connections",
     "quarantine",
-  ]);
-  for (const name of [
-    "sessions",
-    "messages",
-    "agents",
-    "quarantine",
-  ] as Store[])
-    tx.objectStore(name).clear();
+  ];
+  const tx = await store("readwrite", names);
+  for (const name of names) tx.objectStore(name).clear();
   for (const session of records.sessions)
     tx.objectStore("sessions").put(session);
   for (const message of records.messages)
     tx.objectStore("messages").put(message);
   for (const agent of records.agents) tx.objectStore("agents").put(agent);
+  for (const connection of records.connections)
+    tx.objectStore("connections").put(connection);
   for (const q of records.quarantine ?? []) tx.objectStore("quarantine").put(q);
-  await new Promise<void>((resolve, reject) => {
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error);
-  });
+  await transactionDone(tx);
   markGithubSyncDirty();
 }
 
@@ -126,10 +126,11 @@ export async function transactPut(records: {
   sessions?: SessionRecord[];
   messages?: MessageRecord[];
   agents?: AgentRecord[];
+  connections?: ConnectionRecord[];
   quarantine?: QuarantineRecord[];
 }): Promise<void> {
   const names = Object.keys(records).filter(
-    (k) => (records as Record<string, unknown[]>)[k]?.length,
+    (key) => (records as Record<string, unknown[]>)[key]?.length,
   ) as Store[];
   if (!names.length) return;
   const tx = await store("readwrite", names);
@@ -138,43 +139,48 @@ export async function transactPut(records: {
   for (const message of records.messages ?? [])
     tx.objectStore("messages").put(message);
   for (const agent of records.agents ?? []) tx.objectStore("agents").put(agent);
+  for (const connection of records.connections ?? [])
+    tx.objectStore("connections").put(connection);
   for (const q of records.quarantine ?? []) tx.objectStore("quarantine").put(q);
-  await new Promise<void>((resolve, reject) => {
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error);
-  });
+  await transactionDone(tx);
   if (
     records.sessions?.length ||
     records.messages?.length ||
-    records.agents?.length
+    records.agents?.length ||
+    records.connections?.length
   )
     markGithubSyncDirty();
 }
 
+function transactionDone(tx: IDBTransaction): Promise<void> {
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}
+
 export async function snapshot(): Promise<DbSnapshot> {
-  const [sessions, messages, agents, quarantined] = await Promise.all([
-    getAll<SessionRecord>("sessions"),
-    getAll<MessageRecord>("messages"),
-    getAll<AgentRecord>("agents"),
-    getAll<QuarantineRecord>("quarantine"),
-  ]);
-  return { sessions, messages, agents, quarantined };
+  const [sessions, messages, agents, connections, quarantined] =
+    await Promise.all([
+      getAll<SessionRecord>("sessions"),
+      getAll<MessageRecord>("messages"),
+      getAll<AgentRecord>("agents"),
+      getAll<ConnectionRecord>("connections"),
+      getAll<QuarantineRecord>("quarantine"),
+    ]);
+  return { sessions, messages, agents, connections, quarantined };
 }
 
 export async function clearDbForTests(): Promise<void> {
-  const tx = await store("readwrite", [
+  const names: Store[] = [
     "sessions",
     "messages",
     "agents",
+    "connections",
     "quarantine",
-  ]);
-  for (const name of [
-    "sessions",
-    "messages",
-    "agents",
-    "quarantine",
-  ] as Store[])
-    tx.objectStore(name).clear();
-  await new Promise<void>((resolve) => (tx.oncomplete = () => resolve()));
+  ];
+  const tx = await store("readwrite", names);
+  for (const name of names) tx.objectStore(name).clear();
+  await transactionDone(tx);
 }

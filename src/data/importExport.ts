@@ -2,14 +2,17 @@ import { getOne, replaceData, snapshot, transactPut } from "./db";
 import {
   now,
   type AgentRecord,
+  type ConnectionRecord,
   type ExportFile,
   type MessageRecord,
   type QuarantineRecord,
   type SessionRecord,
 } from "./schema";
 import {
+  normalizeExportFile,
   recordsEqual,
   validateAgent,
+  validateConnection,
   validateExportFile,
   validateMessage,
   validateSession,
@@ -18,11 +21,12 @@ import {
 export async function createExport(): Promise<ExportFile> {
   const snap = await snapshot();
   return {
-    version: 1,
+    version: 2,
     exportedAt: now(),
     sessions: snap.sessions,
     messages: snap.messages,
     agents: snap.agents,
+    connections: snap.connections,
   };
 }
 
@@ -45,11 +49,14 @@ function withoutKeys<T extends Record<string, unknown>>(
 }
 
 function mergeNonConflicting<T extends { updatedAt: number }>(
-  store: "sessions" | "messages" | "agents",
+  store: "sessions" | "messages" | "agents" | "connections",
   existing: T,
   incoming: T,
 ): T | null {
-  if (store === "agents" && existing.updatedAt !== incoming.updatedAt)
+  if (
+    (store === "agents" || store === "connections") &&
+    existing.updatedAt !== incoming.updatedAt
+  )
     return incoming.updatedAt > existing.updatedAt ? incoming : existing;
   if (store === "messages") {
     const existingMessage = existing as unknown as MessageRecord;
@@ -78,7 +85,7 @@ function mergeNonConflicting<T extends { updatedAt: number }>(
 }
 
 async function mergeOne<T extends { id: string; updatedAt: number }>(
-  store: "sessions" | "messages" | "agents",
+  store: "sessions" | "messages" | "agents" | "connections",
   incoming: T,
   validate: (v: unknown) => boolean,
   referenceError?: string | null,
@@ -181,7 +188,7 @@ export interface ImportFieldDiff {
 }
 
 export interface ImportRecordDiff {
-  store: "sessions" | "messages" | "agents";
+  store: "sessions" | "messages" | "agents" | "connections";
   id: string;
   status: ImportRecordStatus;
   label: string;
@@ -200,9 +207,15 @@ export interface ImportAnalysis {
   valid: boolean;
   error?: string;
   exportedAt?: number;
-  summary?: Record<"sessions" | "messages" | "agents", ImportDiffBucket>;
+  summary?: Record<
+    "sessions" | "messages" | "agents" | "connections",
+    ImportDiffBucket
+  >;
   quarantineReasons: string[];
-  records?: Record<"sessions" | "messages" | "agents", ImportRecordDiff[]>;
+  records?: Record<
+    "sessions" | "messages" | "agents" | "connections",
+    ImportRecordDiff[]
+  >;
   file?: ExportFile;
 }
 
@@ -242,11 +255,13 @@ function stringifyValue(value: unknown): string {
 }
 
 function labelRecord(
-  store: "sessions" | "messages" | "agents",
-  record: SessionRecord | MessageRecord | AgentRecord,
+  store: "sessions" | "messages" | "agents" | "connections",
+  record: SessionRecord | MessageRecord | AgentRecord | ConnectionRecord,
 ): string {
   if (store === "sessions") return (record as SessionRecord).title || record.id;
   if (store === "agents") return (record as AgentRecord).name || record.id;
+  if (store === "connections")
+    return (record as ConnectionRecord).name || record.id;
   const message = record as MessageRecord;
   const snippet = message.content.replace(/\s+/g, " ").trim().slice(0, 80);
   return `${message.role}: ${snippet || message.id}`;
@@ -260,7 +275,7 @@ function isTextField(store: string, field: string): boolean {
 }
 
 function fieldDiffs(
-  store: "sessions" | "messages" | "agents",
+  store: "sessions" | "messages" | "agents" | "connections",
   local: Record<string, unknown> | null,
   incoming: Record<string, unknown> | null,
 ): ImportFieldDiff[] {
@@ -279,14 +294,14 @@ function fieldDiffs(
 }
 
 function conflictKey(
-  store: "sessions" | "messages" | "agents",
+  store: "sessions" | "messages" | "agents" | "connections",
   id: string,
 ): string {
   return `${store}:${id}`;
 }
 
 function recordDiff<T extends { id: string; updatedAt?: number }>(
-  store: "sessions" | "messages" | "agents",
+  store: "sessions" | "messages" | "agents" | "connections",
   status: ImportRecordStatus,
   record: T,
   local: T | null,
@@ -299,7 +314,8 @@ function recordDiff<T extends { id: string; updatedAt?: number }>(
     status,
     label: labelRecord(
       store,
-      record as unknown as SessionRecord | MessageRecord | AgentRecord,
+      record as unknown as
+        SessionRecord | MessageRecord | AgentRecord | ConnectionRecord,
     ),
     updatedAt: record.updatedAt,
     reason,
@@ -312,7 +328,7 @@ function recordDiff<T extends { id: string; updatedAt?: number }>(
 }
 
 function analyzeRecords<T extends { id: string; updatedAt: number }>(
-  store: "sessions" | "messages" | "agents",
+  store: "sessions" | "messages" | "agents" | "connections",
   incoming: T[],
   existing: Map<string, T>,
   referenceReasons = new Map<string, string>(),
@@ -359,7 +375,8 @@ function analyzeRecords<T extends { id: string; updatedAt: number }>(
 }
 
 export async function analyzeImport(value: unknown): Promise<ImportAnalysis> {
-  if (!validateExportFile(value))
+  const file = normalizeExportFile(value);
+  if (!file)
     return {
       valid: false,
       error: "Invalid export file.",
@@ -370,15 +387,17 @@ export async function analyzeImport(value: unknown): Promise<ImportAnalysis> {
     sessions: new Map(snap.sessions.map((s) => [s.id, s])),
     messages: new Map(snap.messages.map((m) => [m.id, m])),
     agents: new Map(snap.agents.map((a) => [a.id, a])),
+    connections: new Map(snap.connections.map((c) => [c.id, c])),
   };
-  const refs = referenceErrors(value, existing);
+  const refs = referenceErrors(file, existing);
   const summary = {
-    sessions: countDiff(value.sessions, existing.sessions),
-    messages: countDiff(value.messages, existing.messages),
-    agents: countDiff(value.agents, existing.agents),
+    sessions: countDiff(file.sessions, existing.sessions),
+    messages: countDiff(file.messages, existing.messages),
+    agents: countDiff(file.agents, existing.agents),
+    connections: countDiff(file.connections, existing.connections),
   };
   const quarantineReasons: string[] = [];
-  for (const s of value.sessions) {
+  for (const s of file.sessions) {
     const reason = refs.sessions.get(s.id);
     const current = existing.sessions.get(s.id);
     if (reason) {
@@ -393,7 +412,7 @@ export async function analyzeImport(value: unknown): Promise<ImportAnalysis> {
       quarantineReasons.push(`session ${s.id}: Conflicting stable ID record`);
     }
   }
-  for (const m of value.messages) {
+  for (const m of file.messages) {
     const reason = refs.messages.get(m.id);
     const current = existing.messages.get(m.id);
     if (reason) {
@@ -408,7 +427,7 @@ export async function analyzeImport(value: unknown): Promise<ImportAnalysis> {
       quarantineReasons.push(`message ${m.id}: Conflicting stable ID record`);
     }
   }
-  for (const a of value.agents) {
+  for (const a of file.agents) {
     const current = existing.agents.get(a.id);
     if (
       current &&
@@ -419,42 +438,65 @@ export async function analyzeImport(value: unknown): Promise<ImportAnalysis> {
       quarantineReasons.push(`agent ${a.id}: Conflicting stable ID record`);
     }
   }
+  for (const connection of file.connections) {
+    const current = existing.connections.get(connection.id);
+    if (
+      current &&
+      !recordsEqual(current, connection) &&
+      !mergeNonConflicting("connections", current, connection)
+    ) {
+      summary.connections.quarantined += 1;
+      quarantineReasons.push(
+        `connection ${connection.id}: Conflicting stable ID record`,
+      );
+    }
+  }
   return {
     valid: true,
-    exportedAt: value.exportedAt,
+    exportedAt: file.exportedAt,
     summary,
     quarantineReasons,
     records: {
       sessions: analyzeRecords(
         "sessions",
-        value.sessions,
+        file.sessions,
         existing.sessions,
         refs.sessions,
       ),
       messages: analyzeRecords(
         "messages",
-        value.messages,
+        file.messages,
         existing.messages,
         refs.messages,
       ),
-      agents: analyzeRecords("agents", value.agents, existing.agents),
+      agents: analyzeRecords("agents", file.agents, existing.agents),
+      connections: analyzeRecords(
+        "connections",
+        file.connections,
+        existing.connections,
+      ),
     },
-    file: value,
+    file,
   };
 }
 
 export async function replaceImport(
   value: unknown,
 ): Promise<{ imported: number }> {
-  if (!validateExportFile(value)) throw new Error("Invalid export file.");
+  const file = normalizeExportFile(value);
+  if (!file) throw new Error("Invalid export file.");
   await replaceData({
-    sessions: value.sessions,
-    messages: value.messages,
-    agents: value.agents,
+    sessions: file.sessions,
+    messages: file.messages,
+    agents: file.agents,
+    connections: file.connections,
   });
   return {
     imported:
-      value.sessions.length + value.messages.length + value.agents.length,
+      file.sessions.length +
+      file.messages.length +
+      file.agents.length +
+      file.connections.length,
   };
 }
 
@@ -462,13 +504,15 @@ export async function importFile(
   value: unknown,
   resolutions: ImportConflictResolutions = {},
 ): Promise<{ imported: number; quarantined: number }> {
-  if (!validateExportFile(value)) throw new Error("Invalid export file.");
-  const refs = referenceErrors(value, await existingMaps());
+  const file = normalizeExportFile(value);
+  if (!file) throw new Error("Invalid export file.");
+  const refs = referenceErrors(file, await existingMaps());
   const sessions: SessionRecord[] = [];
   const messages: MessageRecord[] = [];
   const agents: AgentRecord[] = [];
+  const connections: ConnectionRecord[] = [];
   const quarantined: QuarantineRecord[] = [];
-  for (const s of value.sessions) {
+  for (const s of file.sessions) {
     const r = await mergeOne(
       "sessions",
       s,
@@ -479,7 +523,7 @@ export async function importFile(
     if (r.record) sessions.push(r.record);
     if (r.quarantine) quarantined.push(r.quarantine);
   }
-  for (const m of value.messages) {
+  for (const m of file.messages) {
     const r = await mergeOne(
       "messages",
       m,
@@ -490,7 +534,7 @@ export async function importFile(
     if (r.record) messages.push(r.record);
     if (r.quarantine) quarantined.push(r.quarantine);
   }
-  for (const a of value.agents) {
+  for (const a of file.agents) {
     const r = await mergeOne(
       "agents",
       a,
@@ -501,9 +545,27 @@ export async function importFile(
     if (r.record) agents.push(r.record);
     if (r.quarantine) quarantined.push(r.quarantine);
   }
-  await transactPut({ sessions, messages, agents, quarantine: quarantined });
+  for (const connection of file.connections) {
+    const r = await mergeOne(
+      "connections",
+      connection,
+      validateConnection,
+      undefined,
+      resolutions[conflictKey("connections", connection.id)],
+    );
+    if (r.record) connections.push(r.record);
+    if (r.quarantine) quarantined.push(r.quarantine);
+  }
+  await transactPut({
+    sessions,
+    messages,
+    agents,
+    connections,
+    quarantine: quarantined,
+  });
   return {
-    imported: sessions.length + messages.length + agents.length,
+    imported:
+      sessions.length + messages.length + agents.length + connections.length,
     quarantined: quarantined.length,
   };
 }

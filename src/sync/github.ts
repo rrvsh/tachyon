@@ -1,5 +1,5 @@
 import { analyzeImport, createExport, importFile } from "../data/importExport";
-import { validateExportFile } from "../data/validation";
+import { normalizeExportFile, validateExportFile } from "../data/validation";
 import { requestRegistry } from "../requests/lifecycle";
 import {
   DEFAULT_SYNC_PATH,
@@ -46,12 +46,14 @@ function exportDataEqualIgnoringExportedAt(
       sessions: byId(left.sessions),
       messages: byId(left.messages),
       agents: byId(left.agents),
+      connections: byId(left.connections),
     }) ===
     JSON.stringify({
       version: right.version,
       sessions: byId(right.sessions),
       messages: byId(right.messages),
       agents: byId(right.agents),
+      connections: byId(right.connections),
     })
   );
 }
@@ -245,7 +247,8 @@ export async function runGithubFullSync(
 
     const parsed = JSON.parse(remote.text) as unknown;
     if (!validateExportFile(parsed)) throw new Error("Remote file is invalid.");
-    const review = await analyzeImport(parsed);
+    const normalized = normalizeExportFile(parsed)!;
+    const review = await analyzeImport(normalized);
     const hasConflicts = Object.values(review.summary ?? {}).some(
       (bucket) => bucket.quarantined > 0,
     );
@@ -262,9 +265,9 @@ export async function runGithubFullSync(
       });
     }
 
-    await importFile(parsed);
+    await importFile(normalized);
     const exportFile = await createExport();
-    if (exportDataEqualIgnoringExportedAt(exportFile, parsed)) {
+    if (exportDataEqualIgnoringExportedAt(exportFile, normalized)) {
       return updateGithubSyncState({
         remoteSha: remote.sha,
         dirtySince: null,

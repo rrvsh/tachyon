@@ -29,6 +29,16 @@ export interface AgentRecord {
   model: string;
   systemPrompt: string;
   params: Record<string, unknown>;
+  connectionId?: string | null;
+  createdAt: number;
+  updatedAt: number;
+  archived: boolean;
+}
+
+export interface ConnectionRecord {
+  id: string;
+  name: string;
+  endpointUrl: string;
   createdAt: number;
   updatedAt: number;
   archived: boolean;
@@ -36,7 +46,7 @@ export interface AgentRecord {
 
 export interface QuarantineRecord {
   id: string;
-  kind: "session" | "message" | "agent";
+  kind: "session" | "message" | "agent" | "connection";
   reason: string;
   record: unknown;
   createdAt: number;
@@ -44,13 +54,14 @@ export interface QuarantineRecord {
 
 export interface SettingsRecord {
   openRouterApiKey: string;
+  connectionApiKeys: Record<string, string>;
   selectedAgentId: string | null;
   fontFamily: string;
   openThinkingByDefault: boolean;
   rightSidebarCollapsed: boolean;
 }
 
-export interface ExportFile {
+export interface ExportFileV1 {
   version: 1;
   exportedAt: number;
   sessions: SessionRecord[];
@@ -58,8 +69,17 @@ export interface ExportFile {
   agents: AgentRecord[];
 }
 
+export interface ExportFile {
+  version: 2;
+  exportedAt: number;
+  sessions: SessionRecord[];
+  messages: MessageRecord[];
+  agents: AgentRecord[];
+  connections: ConnectionRecord[];
+}
+
 export const DB_NAME = "tachyon-chat";
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 
 export function now(): number {
   return Date.now();
@@ -79,4 +99,8 @@ export function messageId(): string {
 
 export function agentId(): string {
   return `a_${shortId()}`;
+}
+
+export function connectionId(): string {
+  return `c_${shortId()}`;
 }

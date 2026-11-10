@@ -19,6 +19,7 @@ describe("request lifecycle", () => {
     const a = defaultAgent();
     await putOne("agents", a);
     saveSettings({
+      connectionApiKeys: {},
       openRouterApiKey: "",
       selectedAgentId: a.id,
       fontFamily: DEFAULT_FONT_FAMILY,

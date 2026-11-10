@@ -1,5 +1,10 @@
 import { getAll, getMessagesBySession, getOne } from "../data/db";
-import type { AgentRecord, MessageRecord, SessionRecord } from "../data/schema";
+import type {
+  AgentRecord,
+  ConnectionRecord,
+  MessageRecord,
+  SessionRecord,
+} from "../data/schema";
 import { latestLeaf, visiblePath } from "../messages/tree";
 import { getCurrentPointer } from "../settings/settings";
 
@@ -11,6 +16,7 @@ export interface AppState {
   messages: MessageRecord[];
   visible: MessageRecord[];
   agents: AgentRecord[];
+  connections: ConnectionRecord[];
   currentMessageId: string | null;
   errors: string[];
   info: string[];
@@ -44,9 +50,10 @@ export function sessionIdFromUrl(): string | null {
 }
 
 export async function loadState(): Promise<AppState> {
-  const [allSessions, agents] = await Promise.all([
+  const [allSessions, agents, connections] = await Promise.all([
     getAll<SessionRecord>("sessions"),
     getAll<AgentRecord>("agents"),
+    getAll<ConnectionRecord>("connections"),
   ]);
   const sessionId = sessionIdFromUrl();
   const session = sessionId
@@ -72,6 +79,7 @@ export async function loadState(): Promise<AppState> {
     messages,
     visible: session ? visiblePath(messages, current, session.id) : [],
     agents: agents.sort((a, b) => a.name.localeCompare(b.name)),
+    connections: connections.sort((a, b) => a.name.localeCompare(b.name)),
     currentMessageId: current,
     errors: [...errors],
     info: [...info],

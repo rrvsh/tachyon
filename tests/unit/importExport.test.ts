@@ -25,10 +25,11 @@ describe("import/export", () => {
     };
     await putOne("sessions", s);
     expect(await createExport()).toMatchObject({
-      version: 1,
+      version: 2,
       sessions: [s],
       messages: [],
       agents: [],
+      connections: [],
     });
   });
   it("merges records that differ only by updatedAt", async () => {
@@ -269,6 +270,47 @@ describe("import/export", () => {
     const snap = await snapshot();
     expect(snap.sessions).toHaveLength(0);
     expect(snap.quarantined).toHaveLength(0);
+  });
+
+  it("imports version 1 agents as built-in connection agents", async () => {
+    const agent: AgentRecord = {
+      id: "legacy-agent",
+      name: "Legacy",
+      model: "model",
+      systemPrompt: "",
+      params: {},
+      createdAt: 1,
+      updatedAt: 1,
+      archived: false,
+    };
+    await importFile({
+      version: 1,
+      exportedAt: 1,
+      sessions: [],
+      messages: [],
+      agents: [agent],
+    });
+    expect((await snapshot()).agents[0].connectionId).toBeNull();
+  });
+
+  it("exports and imports connection metadata without credentials", async () => {
+    const connection = {
+      id: "c_export",
+      name: "Example",
+      endpointUrl: "https://api.example.com/v1/chat/completions",
+      createdAt: 1,
+      updatedAt: 1,
+      archived: false,
+    };
+    await putOne("connections", connection);
+    localStorage.setItem(
+      "tachyon-settings",
+      JSON.stringify({ connectionApiKeys: { c_export: "secret" } }),
+    );
+
+    const exported = await createExport();
+    expect(exported.connections).toEqual([connection]);
+    expect(JSON.stringify(exported)).not.toContain("secret");
   });
 
   it("quarantines broken session root and message parent references", async () => {

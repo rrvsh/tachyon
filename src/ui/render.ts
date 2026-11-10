@@ -1,4 +1,4 @@
-import type { AgentRecord } from "../data/schema";
+import type { AgentRecord, ConnectionRecord } from "../data/schema";
 import type { AppState } from "../app/state";
 import { normalizeMessageForDisplay } from "../messages/display";
 import { siblings } from "../messages/tree";
@@ -844,18 +844,23 @@ function renderRightSidebar(
   const tab = ["sessions", "agents", "data", "settings"].includes(activeTab)
     ? activeTab
     : "sessions";
-  return `<div class="right-sidebar-content"><div class="mobile-sidebar-header"><span class="app-mark">menu</span><button class="icon-button borderless-icon" type="button" data-toggle-right-sidebar aria-label="close sidebar" title="close sidebar">close</button></div><div class="right-tabs"><button class="left-text-button right-tab ${tab === "sessions" ? "active" : ""}" data-right-tab="sessions">sessions</button><button class="left-text-button right-tab ${tab === "agents" ? "active" : ""}" data-right-tab="agents">agents</button><button class="left-text-button right-tab ${tab === "data" ? "active" : ""}" data-right-tab="data">data</button><button class="left-text-button right-tab ${tab === "settings" ? "active" : ""}" data-right-tab="settings">settings</button></div>${tab === "sessions" ? renderSessionsPanel(state) : tab === "settings" ? renderSettingsPanel(settings) : tab === "agents" ? renderAgentsPanel(state, app) : renderDataPanel(app)}</div>`;
+  return `<div class="right-sidebar-content"><div class="mobile-sidebar-header"><span class="app-mark">menu</span><button class="icon-button borderless-icon" type="button" data-toggle-right-sidebar aria-label="close sidebar" title="close sidebar">close</button></div><div class="right-tabs"><button class="left-text-button right-tab ${tab === "sessions" ? "active" : ""}" data-right-tab="sessions">sessions</button><button class="left-text-button right-tab ${tab === "agents" ? "active" : ""}" data-right-tab="agents">agents</button><button class="left-text-button right-tab ${tab === "data" ? "active" : ""}" data-right-tab="data">data</button><button class="left-text-button right-tab ${tab === "settings" ? "active" : ""}" data-right-tab="settings">settings</button></div>${tab === "sessions" ? renderSessionsPanel(state) : tab === "settings" ? renderSettingsPanel(settings, state, app) : tab === "agents" ? renderAgentsPanel(state, app) : renderDataPanel(app)}</div>`;
 }
 
 function renderSessionsPanel(state: AppState): string {
   return `<section class="right-panel"><nav class="left-session-nav"><ul>${state.sessions.map((s) => `<li class="session-row"><button class="session-link ${state.session?.id === s.id ? "active" : ""}" data-open-session="${s.id}" title="open chat">${esc(s.title)}</button><button class="left-text-button" data-archive-session="${s.id}" aria-label="archive chat" title="archive chat">archive</button></li>`).join("")}</ul><details class="archive-panel"><summary>archived</summary><ul>${state.archivedSessions.map((s) => `<li class="session-row"><button class="session-link" data-open-session="${s.id}" title="open archived chat">${esc(s.title)}</button><button class="left-text-button" data-unarchive-session="${s.id}" aria-label="restore chat" title="restore chat">restore</button></li>`).join("")}</ul></details></nav></section>`;
 }
 
-function renderSettingsPanel(settings: {
-  openRouterApiKey: string;
-  selectedAgentId: string | null;
-  fontFamily: string;
-}): string {
+function renderSettingsPanel(
+  settings: {
+    openRouterApiKey: string;
+    connectionApiKeys?: Record<string, string>;
+    selectedAgentId: string | null;
+    fontFamily: string;
+  },
+  state: AppState,
+  app: HTMLElement,
+): string {
   const sync = getGithubSyncState();
   const tokenUrl =
     "https://github.com/settings/personal-access-tokens/new?name=Tachyon+Sync&description=Sync+Tachyon+data&contents=write&expires_in=365";
@@ -880,6 +885,8 @@ function renderSettingsPanel(settings: {
         font
         <select data-setting-font>${fontOptions}</select>
       </label>
+
+      ${renderConnectionsSettings(state, app, settings.connectionApiKeys ?? {})}
 
       <div class="settings-group">
         <p><strong>github</strong></p>
@@ -925,6 +932,40 @@ function renderSettingsPanel(settings: {
       <p class="settings-version">version ${esc(APP_COMMIT.slice(0, 7))}</p>
     </section>
   `;
+}
+
+function renderConnectionsSettings(
+  state: AppState,
+  app: HTMLElement,
+  apiKeys: Record<string, string>,
+): string {
+  const active = state.connections.filter((connection) => !connection.archived);
+  const archived = state.connections.filter(
+    (connection) => connection.archived,
+  );
+  const editing = app.dataset.connectionFormId
+    ? state.connections.find(
+        (connection) => connection.id === app.dataset.connectionFormId,
+      )
+    : undefined;
+  const form = app.dataset.connectionFormMode
+    ? `<form class="agent-form connection-form" data-connection-form>
+        <input type="hidden" name="id" value="${attr(editing?.id ?? "")}">
+        <label>name<input name="name" value="${attr(editing?.name ?? "")}" placeholder="Local model"></label>
+        <label>chat completions URL<input name="endpointUrl" type="url" value="${attr(editing?.endpointUrl ?? "")}" placeholder="https://api.example.com/v1/chat/completions"></label>
+        <label>API key<input name="apiKey" type="password" placeholder="sk-..."><span class="field-help">${editing && apiKeys[editing.id] ? "An API key is saved locally. Leave blank to keep it." : "Optional. Stored only in this browser."}</span></label>
+        <p class="field-help">The endpoint must allow browser requests from this site. HTTPS pages may be unable to call HTTP endpoints.</p>
+        <div class="settings-actions"><button class="left-text-button">save</button><button type="button" class="left-text-button" data-connection-form-cancel>cancel</button></div>
+      </form>`
+    : `<button class="left-text-button full-width-text-button" data-connection-create>add connection</button>`;
+  return `<div class="settings-group"><p><strong>connections</strong></p><ul class="agent-list sidebar-agent-list">${active.map((connection) => renderConnectionRow(connection, apiKeys)).join("")}</ul><details class="archive-panel"><summary>archived</summary><ul class="agent-list sidebar-agent-list">${archived.map((connection) => renderConnectionRow(connection, apiKeys)).join("")}</ul></details>${form}</div>`;
+}
+
+function renderConnectionRow(
+  connection: ConnectionRecord,
+  apiKeys: Record<string, string>,
+): string {
+  return `<li data-connection-id="${attr(connection.id)}"><div><strong>${esc(connection.name)}</strong><code>${esc(connection.endpointUrl)}</code><span class="field-help">${apiKeys[connection.id] ? "API key saved locally" : "no API key"}</span></div><div><button class="left-text-button" data-connection-edit="${attr(connection.id)}">edit</button>${apiKeys[connection.id] ? `<button class="left-text-button" data-connection-forget-key="${attr(connection.id)}">forget key</button>` : ""}<button class="left-text-button" data-connection-archive="${attr(connection.id)}" aria-label="${connection.archived ? "Restore connection" : "Archive connection"}">${connection.archived ? "restore" : "archive"}</button></div></li>`;
 }
 
 function renderDataPanel(app: HTMLElement): string {
@@ -987,7 +1028,7 @@ function renderDataPanel(app: HTMLElement): string {
       </section>
 
       <section class="data-row">
-        <p class="field-help">Download a backup of all chats and agents.</p>
+        <p class="field-help">Download a backup of all chats, agents, and connections. API keys are excluded.</p>
         <button class="left-text-button" data-action="export">export data</button>
       </section>
 
@@ -1101,7 +1142,7 @@ function renderImportSummary(
   review: ParsedImportReview,
   resolutions: Record<string, string>,
 ): string {
-  const rows = ["sessions", "messages", "agents"]
+  const rows = ["sessions", "messages", "agents", "connections"]
     .map((key) => {
       const bucket = review.summary?.[key];
       if (!bucket) return "";
@@ -1124,7 +1165,7 @@ function renderImportRecordDiffs(
   resolutions: Record<string, string>,
 ): string {
   if (!review.records) return "";
-  return ["sessions", "messages", "agents"]
+  return ["sessions", "messages", "agents", "connections"]
     .map((key) => {
       const records = (review.records?.[key] ?? []).filter(
         (record) => record.status !== "unchanged",
@@ -1184,7 +1225,7 @@ function renderImportFieldDiff(field: {
 function renderAgentsPanel(state: AppState, app: HTMLElement): string {
   const activeAgents = state.agents.filter((a) => !a.archived);
   const archivedAgents = state.agents.filter((a) => a.archived);
-  return `<section class="right-panel"><ul class="agent-list sidebar-agent-list">${activeAgents.map((a) => renderAgentRow(a)).join("")}</ul><details class="archive-panel"><summary>archived</summary><ul class="agent-list sidebar-agent-list">${archivedAgents.map((a) => renderAgentRow(a)).join("")}</ul></details><button class="left-text-button full-width-text-button" data-agent-create>create new</button>${renderAgentForm(state, app)}</section>`;
+  return `<section class="right-panel"><ul class="agent-list sidebar-agent-list">${activeAgents.map((a) => renderAgentRow(a, state.connections)).join("")}</ul><details class="archive-panel"><summary>archived</summary><ul class="agent-list sidebar-agent-list">${archivedAgents.map((a) => renderAgentRow(a, state.connections)).join("")}</ul></details><button class="left-text-button full-width-text-button" data-agent-create>create new</button>${renderAgentForm(state, app)}</section>`;
 }
 
 function renderAgentForm(state: AppState, app: HTMLElement): string {
@@ -1194,18 +1235,42 @@ function renderAgentForm(state: AppState, app: HTMLElement): string {
     mode === "edit"
       ? state.agents.find((a) => a.id === app.dataset.agentFormId)
       : undefined;
-  const draftAgent: AgentRecord = agent ?? {
-    id: "",
-    name: "",
-    model: "",
-    systemPrompt: "",
-    params: {},
-    createdAt: 0,
-    updatedAt: 0,
-    archived: false,
-  };
+  const selectedConnectionId =
+    app.dataset.agentFormConnectionId ?? agent?.connectionId ?? "";
+  const draftAgent: AgentRecord = agent
+    ? { ...agent, connectionId: selectedConnectionId || null }
+    : {
+        id: "",
+        name: "",
+        model: "",
+        systemPrompt: "",
+        params: {},
+        connectionId: selectedConnectionId || null,
+        createdAt: 0,
+        updatedAt: 0,
+        archived: false,
+      };
   const status = agent ? `editing: ${esc(agent.name)}` : "creating new agent";
-  return `<div class="agent-fields-section"><p class="agent-form-status">${status}</p><form class="agent-form" data-agent-form><input type="hidden" name="id" value="${attr(agent?.id ?? "")}"><label>name<input name="name" value="${attr(agent?.name ?? "")}" placeholder="concise assistant"></label><label>model slug<input name="model" value="${attr(agent?.model ?? "")}" placeholder="openai/gpt-4o-mini"></label><label>system prompt<textarea name="systemPrompt" placeholder="You are concise and practical.">${esc(agent?.systemPrompt ?? "")}</textarea></label>${renderParamFields(draftAgent, agent?.params)}<div class="settings-actions"><button class="left-text-button save-agent-button" aria-label="Save agent" title="Save agent">save</button><button type="button" class="left-text-button" data-agent-form-cancel>cancel</button></div></form></div>`;
+  const selectedConnection = selectedConnectionId
+    ? state.connections.find(
+        (connection) => connection.id === selectedConnectionId,
+      )
+    : undefined;
+  const connectionOptions = state.connections
+    .filter(
+      (connection) =>
+        !connection.archived || connection.id === selectedConnectionId,
+    )
+    .map(
+      (connection) =>
+        `<option value="${attr(connection.id)}" ${connection.id === selectedConnectionId ? "selected" : ""}>${esc(connection.name)}${connection.archived ? " (archived)" : ""}</option>`,
+    )
+    .join("");
+  const missingOption =
+    selectedConnectionId && !selectedConnection
+      ? `<option value="${attr(selectedConnectionId)}" selected>missing connection</option>`
+      : "";
+  return `<div class="agent-fields-section"><p class="agent-form-status">${status}</p><form class="agent-form" data-agent-form><input type="hidden" name="id" value="${attr(agent?.id ?? "")}"><label>name<input name="name" value="${attr(agent?.name ?? "")}" placeholder="concise assistant"></label><label>connection<select name="connectionId" data-agent-connection><option value="" ${selectedConnectionId ? "" : "selected"}>OpenRouter</option>${connectionOptions}${missingOption}</select></label><label>model slug<input name="model" value="${attr(agent?.model ?? "")}" placeholder="openai/gpt-4o-mini"></label><label>system prompt<textarea name="systemPrompt" placeholder="You are concise and practical.">${esc(agent?.systemPrompt ?? "")}</textarea></label>${renderParamFields(draftAgent, agent?.params)}<div class="settings-actions"><button class="left-text-button save-agent-button" aria-label="Save agent" title="Save agent">save</button><button type="button" class="left-text-button" data-agent-form-cancel>cancel</button></div></form></div>`;
 }
 
 function readPath(source: Record<string, unknown>, path: string): unknown {
@@ -1222,8 +1287,9 @@ function stringifyParam(value: unknown): string {
 
 export function getParamSectionsForAgent(agent: AgentRecord): ParamSection[] {
   const provider = resolveAgentProvider(agent);
-  if (provider === "openrouter") return openRouterParamSections;
-  return [];
+  return provider === "openrouter"
+    ? openRouterParamSections
+    : openRouterParamSections.filter((section) => section.title !== "routing");
 }
 
 function renderParamFields(
@@ -1239,26 +1305,32 @@ function renderParamFields(
     ),
   );
   const extraRows = Object.entries(params)
-    .filter(([key]) => !commonKeys.has(key))
+    .filter(
+      ([key]) =>
+        !commonKeys.has(key) &&
+        (provider === "openrouter" || !["models", "provider"].includes(key)),
+    )
     .map(
       ([key, value]) =>
         `<div class="extra-param-row"><input name="extraParamKey" placeholder="key" value="${attr(key)}"><input name="extraParamValue" placeholder="value or JSON" value="${attr(stringifyParam(value))}"><button class="icon-button" type="button" aria-label="Remove field" title="Remove field">×</button></div>`,
     )
     .join("");
-  const renderedSections =
+  const renderedSections = paramSections
+    .map(
+      (section) =>
+        `<details class="param-section"><summary>${esc(section.title)}</summary><div class="param-section-body">${section.fields.map((field) => renderParamField(field, params)).join("")}</div></details>`,
+    )
+    .join("");
+  const extraHelp =
     provider === "openrouter"
-      ? paramSections
-          .map(
-            (section) =>
-              `<details class="param-section"><summary>${esc(section.title)}</summary><div class="param-section-body">${section.fields.map((field) => renderParamField(field, params)).join("")}</div></details>`,
-          )
-          .join("")
-      : "";
-  const extraConfig =
+      ? "Add advanced OpenRouter request parameters not listed above."
+      : "Add advanced request parameters not listed above.";
+  const extraConfig = `<details class="extra-config"><summary>extra config</summary><div class="param-section-body"><p class="field-help">${extraHelp}</p><div class="extra-param-list" data-extra-param-list>${extraRows}</div><button type="button" class="secondary-button" data-add-param>+ field</button></div></details>`;
+  const summary =
     provider === "openrouter"
-      ? `<details class="extra-config"><summary>extra config</summary><div class="param-section-body"><p class="field-help">Add advanced OpenRouter request parameters not listed above.</p><div class="extra-param-list" data-extra-param-list>${extraRows}</div><button type="button" class="secondary-button" data-add-param>+ field</button></div></details>`
-      : "";
-  return `<details class="params-grid"><summary><a href="https://openrouter.ai/docs/api/reference/parameters" target="_blank" rel="noreferrer">OpenRouter params</a></summary>${renderedSections}${extraConfig}</details>`;
+      ? `<a href="https://openrouter.ai/docs/api/reference/parameters" target="_blank" rel="noreferrer">OpenRouter params</a>`
+      : "chat completion params";
+  return `<details class="params-grid"><summary>${summary}</summary>${renderedSections}${extraConfig}</details>`;
 }
 
 function renderParamField(
@@ -1272,7 +1344,16 @@ function renderParamField(
   return `<label>${field.label}${control}<span class="field-help">${esc(field.description)}</span></label>`;
 }
 
-function renderAgentRow(agent: AgentRecord): string {
+function renderAgentRow(
+  agent: AgentRecord,
+  connections: ConnectionRecord[],
+): string {
   const params = esc(JSON.stringify(agent.params));
-  return `<li data-agent-id="${agent.id}" data-agent-name="${attr(agent.name)}" data-agent-model="${attr(agent.model)}" data-agent-system-prompt="${attr(agent.systemPrompt)}" data-agent-params="${params}"><div><strong>${esc(agent.name)}</strong><code>${esc(agent.model)}</code></div><div><button class="left-text-button" data-agent-edit="${agent.id}" aria-label="Edit agent" title="Edit agent">edit</button><button class="left-text-button" data-agent-duplicate="${agent.id}" aria-label="Duplicate agent" title="Duplicate agent">duplicate</button><button class="left-text-button" data-agent-archive="${agent.id}" aria-label="${agent.archived ? "Restore agent" : "Archive agent"}" title="${agent.archived ? "Restore agent" : "Archive agent"}">${agent.archived ? "restore" : "archive"}</button></div></li>`;
+  const connection = agent.connectionId
+    ? connections.find((candidate) => candidate.id === agent.connectionId)
+    : null;
+  const connectionLabel = agent.connectionId
+    ? (connection?.name ?? "missing connection")
+    : "OpenRouter";
+  return `<li data-agent-id="${agent.id}" data-agent-name="${attr(agent.name)}" data-agent-model="${attr(agent.model)}" data-agent-system-prompt="${attr(agent.systemPrompt)}" data-agent-connection-id="${attr(agent.connectionId ?? "")}" data-agent-params="${params}"><div><strong>${esc(agent.name)}</strong><code>${esc(connectionLabel)} · ${esc(agent.model)}</code></div><div><button class="left-text-button" data-agent-edit="${agent.id}" aria-label="Edit agent" title="Edit agent">edit</button><button class="left-text-button" data-agent-duplicate="${agent.id}" aria-label="Duplicate agent" title="Duplicate agent">duplicate</button><button class="left-text-button" data-agent-archive="${agent.id}" aria-label="${agent.archived ? "Restore agent" : "Archive agent"}" title="${agent.archived ? "Restore agent" : "Archive agent"}">${agent.archived ? "restore" : "archive"}</button></div></li>`;
 }
